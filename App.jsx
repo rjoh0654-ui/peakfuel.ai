@@ -264,10 +264,10 @@ export default function PeakFuelWebsite() {
       <section style={styles.containerSection}>
         <div style={styles.featureStrip}>
           {[
-            ["Feels custom", "Looks personalized from the first interaction."],
-            ["Fast to buy", "Clear offer and low-friction checkout."],
-            ["Easy to trust", "Clean design and benefit-led copy."],
-            ["Made to convert", "Live preview plus premium upgrade path."],
+            ["Built for athletes", "Made around real school, practice, and recovery schedules."],
+            ["Easy to follow", "Clear timing guidance without confusing nutrition talk."],
+            ["Fast results", "Get a personalized preview in under a minute."],
+            ["Instant access", "Choose a plan and unlock your full version right away."],
           ].map(([title, text]) => (
             <div key={title} style={styles.featureStripCard}>
               <div style={styles.featureDot} />
@@ -283,8 +283,8 @@ export default function PeakFuelWebsite() {
           <div>
             <SectionHeading
               eyebrow="Interactive builder"
-              title="Let athletes preview their own plan before they buy."
-              text="That makes the product feel real and lowers skepticism immediately."
+              title="Build your plan in under a minute."
+              text="Enter your schedule, choose your goal, and see a personalized fueling preview instantly."
             />
 
             <div style={styles.formCard}>
@@ -328,13 +328,13 @@ export default function PeakFuelWebsite() {
 
           <div>
             <div style={styles.sideCard}>
-              <div style={styles.sideCardTop}>Why this converts better</div>
+              <div style={styles.sideCardTop}>What you get</div>
               {[
-                "The headline speaks directly to a pain point athletes already feel.",
-                "People see value before paying because the preview updates live.",
-                "The locked section creates curiosity without feeling scammy.",
-                "The middle plan is positioned as the obvious buy.",
-                "Everything is clean, simple, and easy to understand on mobile.",
+                "A personalized daily meal timing plan built around your actual schedule.",
+                "Clear pre-workout, post-workout, and recovery guidance.",
+                "A plan that adjusts to your sport, goal, and training load.",
+                "Simple structure that is easy to follow on school days.",
+                "A cleaner way to fuel without overthinking every meal.",
               ].map((text) => (
                 <div key={text} style={styles.bulletRow}>
                   <span style={styles.bulletDot}>✓</span>
@@ -350,14 +350,14 @@ export default function PeakFuelWebsite() {
         <div style={styles.container}>
           <SectionHeading
             eyebrow="How it works"
-            title="A cleaner funnel makes this easier to sell."
-            text="This page is designed to attract attention, create trust fast, and move people toward a clear next step."
+            title="How PeakFuel AI works"
+            text="A simple process built to help athletes fuel better around school, training, and recovery."
           />
           <div style={styles.stepGrid}>
             {[
-              ["01", "Grab attention", "The promise is direct and easy to understand."],
-              ["02", "Show the product", "The interactive preview makes the offer feel real."],
-              ["03", "Close cleanly", "Simple pricing and strong buttons reduce hesitation."],
+              ["01", "Enter your schedule", "Add your wake time, training time, bedtime, and performance goal."],
+              ["02", "See your preview", "Get a live fueling plan preview based on your inputs."],
+              ["03", "Unlock the full plan", "Choose the option that fits you and get the full version instantly."],
             ].map(([step, title, text]) => (
               <div key={step} style={styles.stepCard}>
                 <div style={styles.stepNum}>{step}</div>
@@ -373,8 +373,8 @@ export default function PeakFuelWebsite() {
         <div style={styles.container}>
           <SectionHeading
             eyebrow="Pricing"
-            title="A pricing stack that pushes most people to the middle plan."
-            text="The Performance plan is framed as the strongest value, which is usually best for conversion."
+            title="Choose the plan that fits your training."
+            text="Start simple or unlock more complete support with the plan that matches your goals."
             center
           />
           <div style={styles.pricingGrid}>
