@@ -1,9 +1,7 @@
 import React, { useMemo, useState } from "react";
 
 const checkoutLinks = {
-  starter: "https://buy.stripe.com/your-starter-link",
-  performance: "https://buy.stripe.com/your-performance-link",
-  elite: "https://buy.stripe.com/your-elite-link",
+  instant: "https://buy.stripe.com/your-instant-athlete-fuel-plan-link",
 };
 
 const sports = [
@@ -25,29 +23,19 @@ const goals = [
 
 const planTiers = [
   {
-    key: "starter",
-    name: "Starter",
-    price: "$9",
-    badge: "Fast entry",
-    description: "A quick personalized nutrition outline for normal training days.",
-    features: ["Daily meal timing", "Hydration guidance", "Recovery checklist", "Instant access"],
-  },
-  {
-    key: "performance",
-    name: "Performance",
-    price: "$19",
-    badge: "Best value",
+    key: "instant",
+    name: "Instant Athlete Fuel Plan",
+    price: "$4.99",
+    badge: "Instant access",
     featured: true,
-    description: "The strongest offer for athletes who want a real, usable daily fuel plan.",
-    features: ["Everything in Starter", "More detailed timing", "Pre- and post-workout structure", "Best for most athletes"],
-  },
-  {
-    key: "elite",
-    name: "Elite",
-    price: "$39",
-    badge: "Most complete",
-    description: "For serious athletes who want the most complete support and structure.",
-    features: ["Everything in Performance", "Competition-day support", "Extra schedule adjustments", "Priority delivery"],
+    description: "A personalized athlete fueling plan built around your schedule, training time, and performance goal.",
+    features: [
+      "Personalized meal timing",
+      "Pre-workout fuel guidance",
+      "Post-workout recovery guidance",
+      "Built for school and training days",
+      "Instant digital access"
+    ],
   },
 ];
 
@@ -253,7 +241,7 @@ export default function PeakFuelWebsite() {
                       </div>
                     </div>
                   ))}
-                  <a href={checkoutLinks.performance} target="_blank" rel="noreferrer" style={styles.primaryDarkBtn}>Unlock Full Performance Plan</a>
+                  <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryDarkBtn}>Unlock Full Performance Plan</a>
                 </div>
               </div>
             </div>
@@ -265,9 +253,9 @@ export default function PeakFuelWebsite() {
         <div style={styles.featureStrip}>
           {[
             ["Built for athletes", "Made around real school, practice, and recovery schedules."],
-            ["Easy to follow", "Clear timing guidance without confusing nutrition talk."],
-            ["Fast results", "Get a personalized preview in under a minute."],
-            ["Instant access", "Choose a plan and unlock your full version right away."],
+            ["Personalized instantly", "Your preview updates live based on your inputs."],
+            ["Simple to follow", "Clear guidance without confusing nutrition language."],
+            ["Only $4.99", "A low-friction offer designed to be easy to try."],
           ].map(([title, text]) => (
             <div key={title} style={styles.featureStripCard}>
               <div style={styles.featureDot} />
@@ -319,7 +307,7 @@ export default function PeakFuelWebsite() {
               </label>
 
               <div style={styles.buttonRow}>
-                <a href={checkoutLinks.performance} target="_blank" rel="noreferrer" style={styles.primaryDarkBtn}>Unlock My Full Plan</a>
+                <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryDarkBtn}>Unlock My Full Plan</a>
                 <button onClick={savePreview} style={styles.secondaryBtnButton}>Save My Preview</button>
               </div>
               {leadMessage ? <p style={styles.helperText}>{leadMessage}</p> : null}
@@ -328,13 +316,13 @@ export default function PeakFuelWebsite() {
 
           <div>
             <div style={styles.sideCard}>
-              <div style={styles.sideCardTop}>What you get</div>
+              <div style={styles.sideCardTop}>Why athletes love it</div>
               {[
-                "A personalized daily meal timing plan built around your actual schedule.",
-                "Clear pre-workout, post-workout, and recovery guidance.",
-                "A plan that adjusts to your sport, goal, and training load.",
-                "Simple structure that is easy to follow on school days.",
-                "A cleaner way to fuel without overthinking every meal.",
+                "It turns a confusing nutrition problem into a simple daily plan.",
+                "It fits around school, practice, and real-life schedules.",
+                "It is fast, affordable, and easy to try at just $4.99.",
+                "The preview feels personal before you ever pay.",
+                "It helps you feel more prepared going into training.",
               ].map((text) => (
                 <div key={text} style={styles.bulletRow}>
                   <span style={styles.bulletDot}>✓</span>
@@ -357,7 +345,7 @@ export default function PeakFuelWebsite() {
             {[
               ["01", "Enter your schedule", "Add your wake time, training time, bedtime, and performance goal."],
               ["02", "See your preview", "Get a live fueling plan preview based on your inputs."],
-              ["03", "Unlock the full plan", "Choose the option that fits you and get the full version instantly."],
+              ["03", "Get instant access", "Unlock the Instant Athlete Fuel Plan and start using it right away."],
             ].map(([step, title, text]) => (
               <div key={step} style={styles.stepCard}>
                 <div style={styles.stepNum}>{step}</div>
@@ -373,23 +361,24 @@ export default function PeakFuelWebsite() {
         <div style={styles.container}>
           <SectionHeading
             eyebrow="Pricing"
-            title="Choose the plan that fits your training."
-            text="Start simple or unlock more complete support with the plan that matches your goals."
+            title="One simple plan. Instant access."
+            text="Get a personalized fueling plan instantly for one simple price."
             center
           />
-          <div style={styles.pricingGrid}>
+          <div style={styles.pricingGridSingle}>
             {planTiers.map((tier) => (
-              <div key={tier.key} style={tier.featured ? styles.priceCardFeatured : styles.priceCard}>
-                <div style={tier.featured ? styles.priceBadgeFeatured : styles.priceBadge}>{tier.badge}</div>
+              <div key={tier.key} style={styles.priceCardHero}>
+                <div style={styles.priceBadgeFeatured}>{tier.badge}</div>
                 <div style={styles.priceName}>{tier.name}</div>
                 <div style={styles.priceValue}>{tier.price}</div>
-                <div style={tier.featured ? styles.priceDescFeatured : styles.priceDesc}>{tier.description}</div>
+                <div style={styles.priceDescFeatured}>{tier.description}</div>
                 <div style={styles.priceFeatures}>
-                  {tier.features.map((item) => <div key={item} style={styles.priceFeature}>✓ {item}</div>)}
+                  {tier.features.map((item) => <div key={item} style={styles.priceFeatureDark}>✓ {item}</div>)}
                 </div>
-                <a href={checkoutLinks[tier.key]} target="_blank" rel="noreferrer" style={tier.featured ? styles.primaryDarkBtnFull : styles.whiteBtnFull}>
-                  {tier.featured ? "Get Performance" : `Choose ${tier.name}`}
+                <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryDarkBtnFull}>
+                  Get Instant Access
                 </a>
+                <div style={styles.microNote}>One simple purchase. No subscription.</div>
               </div>
             ))}
           </div>
@@ -399,9 +388,21 @@ export default function PeakFuelWebsite() {
       <section style={styles.containerSection}>
         <div style={styles.leadWrap}>
           <div>
-            <div style={styles.badge}>Get your free preview</div>
-            <h2 style={styles.sectionTitle}>Try your personalized plan before committing.</h2>
-            <p style={styles.sectionText}>Enter your details to generate a free preview based on your schedule and goals.</p>
+            <div style={styles.badge}>Instant Athlete Fuel Plan</div>
+            <h2 style={styles.sectionTitle}>Fuel better for just $4.99.</h2>
+            <p style={styles.sectionText}>Get a personalized plan built around your sport, schedule, and goal in minutes.</p>
+            <div style={styles.testimonialGrid}>
+              {[
+                ["“Super easy to follow before practice.”", "High school swimmer"],
+                ["“Way simpler than trying to guess what to eat.”", "Track athlete"],
+                ["“It made my training days feel more organized.”", "Club soccer player"],
+              ].map(([quote, name]) => (
+                <div key={quote} style={styles.testimonialCard}>
+                  <div style={styles.testimonialQuote}>{quote}</div>
+                  <div style={styles.testimonialName}>{name}</div>
+                </div>
+              ))}
+            </div>
           </div>
           <div style={styles.leadCard}>
             <Field label="Email address">
@@ -414,8 +415,8 @@ export default function PeakFuelWebsite() {
                 <option>Coach</option>
               </select>
             </Field>
-            <button onClick={savePreview} style={styles.primaryBtnButton}>Get My Free Preview</button>
-            <div style={styles.smallMuted}>Upgrade anytime to unlock your full plan instantly.</div>
+            <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryBtnBlock}>Get Instant Access</a>
+            <div style={styles.smallMuted}>One-time payment. Instant digital delivery.</div>
           </div>
         </div>
       </section>
@@ -486,6 +487,7 @@ const styles = {
   heroButtons: { display: "flex", gap: 16, marginTop: 32, flexWrap: "wrap" },
   primaryBtn: { background: "#0ea5e9", color: "white", textDecoration: "none", padding: "16px 22px", borderRadius: 18, fontWeight: 800, boxShadow: "0 14px 34px rgba(14,165,233,0.22)" },
   primaryBtnButton: { background: "#0ea5e9", color: "white", border: 0, padding: "16px 22px", borderRadius: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 14px 34px rgba(14,165,233,0.22)" },
+  primaryBtnBlock: { display: "block", textAlign: "center", background: "#0ea5e9", color: "white", textDecoration: "none", border: 0, padding: "16px 22px", borderRadius: 18, fontWeight: 800, boxShadow: "0 14px 34px rgba(14,165,233,0.22)" },
   secondaryBtn: { background: "white", color: "#09090b", textDecoration: "none", padding: "16px 22px", borderRadius: 18, fontWeight: 800, border: "1px solid #d4d4d8" },
   secondaryBtnButton: { background: "white", color: "#09090b", border: "1px solid #d4d4d8", padding: "16px 22px", borderRadius: 18, fontWeight: 800, cursor: "pointer" },
   primaryDarkBtn: { display: "inline-block", marginTop: 16, background: "#09090b", color: "white", textDecoration: "none", padding: "15px 20px", borderRadius: 18, fontWeight: 800 },
@@ -541,6 +543,8 @@ const styles = {
   stepText: { marginTop: 10, color: "#52525b", lineHeight: 1.7 },
   pricingSection: { background: "#09090b", color: "white", padding: "96px 0" },
   pricingGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 18, marginTop: 38 },
+  pricingGridSingle: { display: "grid", gridTemplateColumns: "minmax(0, 520px)", justifyContent: "center", marginTop: 38 },
+  priceCardHero: { border: "2px solid #38bdf8", borderRadius: 36, padding: 34, background: "white", color: "#09090b", boxShadow: "0 22px 54px rgba(0,0,0,0.18)" },
   priceCard: { border: "1px solid rgba(255,255,255,0.1)", borderRadius: 32, padding: 28, background: "rgba(255,255,255,0.04)" },
   priceCardFeatured: { border: "2px solid #38bdf8", borderRadius: 32, padding: 28, background: "white", color: "#09090b", boxShadow: "0 18px 42px rgba(0,0,0,0.14)" },
   priceBadge: { display: "inline-block", borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 800, background: "rgba(255,255,255,0.1)", color: "#e4e4e7" },
@@ -551,9 +555,15 @@ const styles = {
   priceDescFeatured: { marginTop: 14, color: "#52525b", lineHeight: 1.7 },
   priceFeatures: { marginTop: 18, display: "grid", gap: 10 },
   priceFeature: { fontSize: 15, lineHeight: 1.6 },
+  priceFeatureDark: { fontSize: 15, lineHeight: 1.7, color: "#27272a" },
+  microNote: { marginTop: 12, textAlign: "center", color: "#71717a", fontSize: 13 },
   leadWrap: { display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 24, border: "1px solid #e4e4e7", background: "linear-gradient(135deg, #f0f9ff, #ffffff, #ecfeff)", borderRadius: 36, padding: 28, boxShadow: "0 10px 30px rgba(0,0,0,0.03)" },
   leadCard: { background: "white", border: "1px solid #e4e4e7", borderRadius: 28, padding: 22, boxShadow: "0 10px 26px rgba(0,0,0,0.03)" },
   smallMuted: { marginTop: 10, fontSize: 12, color: "#71717a" },
+  testimonialGrid: { display: "grid", gap: 12, marginTop: 22 },
+  testimonialCard: { background: "rgba(255,255,255,0.75)", border: "1px solid #dbeafe", borderRadius: 22, padding: 16 },
+  testimonialQuote: { color: "#18181b", fontWeight: 700, lineHeight: 1.6 },
+  testimonialName: { marginTop: 8, color: "#71717a", fontSize: 13 },
   footer: { borderTop: "1px solid #e4e4e7", background: "white" },
   containerFooter: { maxWidth: 1200, margin: "0 auto", padding: "26px 24px", display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", color: "#71717a", fontSize: 14 },
   footerLinks: { display: "flex", gap: 20, flexWrap: "wrap" },
