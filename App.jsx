@@ -399,9 +399,9 @@ export default function PeakFuelWebsite() {
       <section style={styles.containerSection}>
         <div style={styles.leadWrap}>
           <div>
-            <div style={styles.badge}>Built to capture leads too</div>
-            <h2 style={styles.sectionTitle}>Not everyone buys today. Capture them anyway.</h2>
-            <p style={styles.sectionText}>Offer a free preview now, then follow up with your paid offer after they see value.</p>
+            <div style={styles.badge}>Get your free preview</div>
+            <h2 style={styles.sectionTitle}>Try your personalized plan before committing.</h2>
+            <p style={styles.sectionText}>Enter your details to generate a free preview based on your schedule and goals.</p>
           </div>
           <div style={styles.leadCard}>
             <Field label="Email address">
@@ -415,7 +415,7 @@ export default function PeakFuelWebsite() {
               </select>
             </Field>
             <button onClick={savePreview} style={styles.primaryBtnButton}>Get My Free Preview</button>
-            <div style={styles.smallMuted}>Then send them to checkout or follow up by email.</div>
+            <div style={styles.smallMuted}>Upgrade anytime to unlock your full plan instantly.</div>
           </div>
         </div>
       </section>
