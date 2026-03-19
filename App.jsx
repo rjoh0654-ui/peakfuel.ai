@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const checkoutLinks = {
   instant: "https://buy.stripe.com/your-instant-athlete-fuel-plan-link",
 };
+
+const STORAGE_KEY = "peakfuel_checkout_plan";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -135,8 +137,31 @@ export default function PeakFuelWebsite() {
     doubleDay: false,
   });
   const [leadMessage, setLeadMessage] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
 
   const plan = useMemo(() => buildPlan(form), [form]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paid = params.get("paid");
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed?.form) {
+          setForm((prev) => ({ ...prev, ...parsed.form }));
+        }
+      } catch (error) {
+        console.error("Could not restore saved plan.", error);
+      }
+    }
+
+    if (paid === "1") {
+      setUnlocked(true);
+      setLeadMessage("Your Instant Athlete Fuel Plan is unlocked below.");
+    }
+  }, []);
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -147,6 +172,21 @@ export default function PeakFuelWebsite() {
       setLeadMessage("Enter your email first so your preview can be saved.");
       return;
     }
+    const payload = { email: form.email, form, plan, savedAt: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    setLeadMessage("Preview saved. Your plan will stay attached to this device through checkout.");
+  }
+
+  function startCheckout() {
+    if (!form.email.trim()) {
+      setLeadMessage("Enter your email first before unlocking your full plan.");
+      return;
+    }
+
+    const payload = { email: form.email, form, plan, savedAt: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.location.href = checkoutLinks.instant;
+  }
     const payload = { email: form.email, form, plan, savedAt: new Date().toISOString() };
     localStorage.setItem("peakfuel_preview", JSON.stringify(payload));
     setLeadMessage("Preview saved. Replace the Stripe links with your real checkout links before publishing.");
@@ -218,7 +258,7 @@ export default function PeakFuelWebsite() {
               </div>
 
               <div id="preview" style={styles.previewListWrap}>
-                {plan.items.slice(0, 3).map((item) => (
+                {(unlocked ? plan.items : plan.items.slice(0, 3)).map((item) => (
                   <div key={item.time + item.title} style={styles.previewItem}>
                     <div style={styles.timeBox}>{item.time}</div>
                     <div>
@@ -228,21 +268,29 @@ export default function PeakFuelWebsite() {
                   </div>
                 ))}
 
-                <div style={styles.lockedBlock}>
-                  <div style={styles.lockedBadge}>Premium plan unlock</div>
-                  <div style={styles.lockedTitle}>Unlock the rest of your day plan</div>
-                  <div style={styles.lockedText}>Get the full pre-training, recovery, dinner timing, and goal-based adjustments.</div>
-                  {plan.items.slice(3).map((item) => (
-                    <div key={item.time + item.title} style={{ ...styles.previewItem, opacity: 0.55 }}>
-                      <div style={{ ...styles.timeBox, background: "#d4d4d8", color: "white" }}>{item.time}</div>
-                      <div>
-                        <div style={{ ...styles.itemTitle, color: "#52525b" }}>{item.title}</div>
-                        <div style={{ ...styles.itemDesc, filter: "blur(2px)", userSelect: "none" }}>{item.desc}</div>
+                {unlocked ? (
+                  <div style={styles.unlockedBlock}>
+                    <div style={styles.unlockedBadge}>Unlocked</div>
+                    <div style={styles.lockedTitle}>Your full Instant Athlete Fuel Plan is ready</div>
+                    <div style={styles.lockedText}>This is your full personalized result based on the schedule and goal you entered before checkout.</div>
+                  </div>
+                ) : (
+                  <div style={styles.lockedBlock}>
+                    <div style={styles.lockedBadge}>Instant Athlete Fuel Plan</div>
+                    <div style={styles.lockedTitle}>Unlock the rest of your day plan</div>
+                    <div style={styles.lockedText}>Get the full pre-training, recovery, dinner timing, and goal-based adjustments tied to the exact inputs you entered above.</div>
+                    {plan.items.slice(3).map((item) => (
+                      <div key={item.time + item.title} style={{ ...styles.previewItem, opacity: 0.55 }}>
+                        <div style={{ ...styles.timeBox, background: "#d4d4d8", color: "white" }}>{item.time}</div>
+                        <div>
+                          <div style={{ ...styles.itemTitle, color: "#52525b" }}>{item.title}</div>
+                          <div style={{ ...styles.itemDesc, filter: "blur(2px)", userSelect: "none" }}>{item.desc}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryDarkBtn}>Unlock Full Performance Plan</a>
-                </div>
+                    ))}
+                    <button onClick={startCheckout} style={styles.primaryDarkButton}>Get Instant Access</button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -307,7 +355,7 @@ export default function PeakFuelWebsite() {
               </label>
 
               <div style={styles.buttonRow}>
-                <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryDarkBtn}>Unlock My Full Plan</a>
+                <button onClick={startCheckout} style={styles.primaryDarkButton}>Unlock My Full Plan</button>
                 <button onClick={savePreview} style={styles.secondaryBtnButton}>Save My Preview</button>
               </div>
               {leadMessage ? <p style={styles.helperText}>{leadMessage}</p> : null}
@@ -375,9 +423,9 @@ export default function PeakFuelWebsite() {
                 <div style={styles.priceFeatures}>
                   {tier.features.map((item) => <div key={item} style={styles.priceFeatureDark}>✓ {item}</div>)}
                 </div>
-                <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryDarkBtnFull}>
+                <button onClick={startCheckout} style={styles.primaryDarkButtonFull}>
                   Get Instant Access
-                </a>
+                </button>
                 <div style={styles.microNote}>One simple purchase. No subscription.</div>
               </div>
             ))}
@@ -415,7 +463,7 @@ export default function PeakFuelWebsite() {
                 <option>Coach</option>
               </select>
             </Field>
-            <a href={checkoutLinks.instant} target="_blank" rel="noreferrer" style={styles.primaryBtnBlock}>Get Instant Access</a>
+            <button onClick={startCheckout} style={styles.primaryBtnBlockButton}>Get Instant Access</button>
             <div style={styles.smallMuted}>One-time payment. Instant digital delivery.</div>
           </div>
         </div>
@@ -488,10 +536,13 @@ const styles = {
   primaryBtn: { background: "#0ea5e9", color: "white", textDecoration: "none", padding: "16px 22px", borderRadius: 18, fontWeight: 800, boxShadow: "0 14px 34px rgba(14,165,233,0.22)" },
   primaryBtnButton: { background: "#0ea5e9", color: "white", border: 0, padding: "16px 22px", borderRadius: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 14px 34px rgba(14,165,233,0.22)" },
   primaryBtnBlock: { display: "block", textAlign: "center", background: "#0ea5e9", color: "white", textDecoration: "none", border: 0, padding: "16px 22px", borderRadius: 18, fontWeight: 800, boxShadow: "0 14px 34px rgba(14,165,233,0.22)" },
+  primaryBtnBlockButton: { display: "block", width: "100%", textAlign: "center", background: "#0ea5e9", color: "white", border: 0, padding: "16px 22px", borderRadius: 18, fontWeight: 800, boxShadow: "0 14px 34px rgba(14,165,233,0.22)", cursor: "pointer" },
   secondaryBtn: { background: "white", color: "#09090b", textDecoration: "none", padding: "16px 22px", borderRadius: 18, fontWeight: 800, border: "1px solid #d4d4d8" },
   secondaryBtnButton: { background: "white", color: "#09090b", border: "1px solid #d4d4d8", padding: "16px 22px", borderRadius: 18, fontWeight: 800, cursor: "pointer" },
   primaryDarkBtn: { display: "inline-block", marginTop: 16, background: "#09090b", color: "white", textDecoration: "none", padding: "15px 20px", borderRadius: 18, fontWeight: 800 },
+  primaryDarkButton: { display: "inline-block", marginTop: 16, background: "#09090b", color: "white", border: 0, padding: "15px 20px", borderRadius: 18, fontWeight: 800, cursor: "pointer" },
   primaryDarkBtnFull: { display: "block", textAlign: "center", marginTop: 24, background: "#09090b", color: "white", textDecoration: "none", padding: "15px 20px", borderRadius: 18, fontWeight: 800 },
+  primaryDarkButtonFull: { display: "block", width: "100%", textAlign: "center", marginTop: 24, background: "#09090b", color: "white", border: 0, padding: "15px 20px", borderRadius: 18, fontWeight: 800, cursor: "pointer" },
   whiteBtnFull: { display: "block", textAlign: "center", marginTop: 24, background: "white", color: "#09090b", textDecoration: "none", padding: "15px 20px", borderRadius: 18, fontWeight: 800 },
   statRow: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 14, marginTop: 32, maxWidth: 720 },
   statCard: { background: "rgba(255,255,255,0.92)", border: "1px solid #e4e4e7", borderRadius: 24, padding: 18, boxShadow: "0 6px 20px rgba(0,0,0,0.03)" },
@@ -512,7 +563,9 @@ const styles = {
   itemTitle: { fontWeight: 800, fontSize: 16 },
   itemDesc: { marginTop: 6, color: "#52525b", lineHeight: 1.7, fontSize: 14 },
   lockedBlock: { border: "1px solid #bae6fd", background: "linear-gradient(135deg, #f0f9ff, #ffffff, #ecfeff)", borderRadius: 28, padding: 18, marginTop: 6 },
+  unlockedBlock: { border: "1px solid #bbf7d0", background: "linear-gradient(135deg, #f0fdf4, #ffffff, #ecfdf5)", borderRadius: 28, padding: 18, marginTop: 6 },
   lockedBadge: { display: "inline-block", background: "#09090b", color: "white", borderRadius: 999, padding: "7px 12px", fontSize: 11, fontWeight: 800 },
+  unlockedBadge: { display: "inline-block", background: "#166534", color: "white", borderRadius: 999, padding: "7px 12px", fontSize: 11, fontWeight: 800 },
   lockedTitle: { fontWeight: 800, fontSize: 22, marginTop: 14 },
   lockedText: { color: "#52525b", fontSize: 14, lineHeight: 1.7, marginTop: 8, marginBottom: 14 },
   featureStrip: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 16, border: "1px solid #e4e4e7", borderRadius: 28, background: "white", padding: 18, boxShadow: "0 8px 26px rgba(0,0,0,0.03)" },
