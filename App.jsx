@@ -4,7 +4,7 @@ const checkoutLinks = {
   instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
 };
 
-const STORAGE_KEY = "peakfuel_checkout_plan_v2";
+const STORAGE_KEY = "peakfuel_checkout_plan_v3";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -93,7 +93,7 @@ const planTiers = [
     price: "$4.99",
     badge: "Instant access",
     description:
-      "A personalized athlete fueling system built around your sport, schedule, training load, hydration, and recovery needs.",
+      "A personalized fueling system built around your sport, schedule, training load, and recovery needs.",
     features: [
       "Exact macro targets",
       "Hydration target in ounces",
@@ -126,13 +126,21 @@ function niceSportLabel(sport) {
   return found ? found[1] : "Athlete";
 }
 
-function goalLabel(goal) {
-  const found = goals.find(([value]) => value === goal);
-  return found ? found[1] : "Perform Better";
-}
-
 function clamp(num, min, max) {
   return Math.max(min, Math.min(max, num));
+}
+
+function hasUserCustomized(form) {
+  return !(
+    form.sport === "swimming" &&
+    form.goal === "perform" &&
+    form.weight === "150" &&
+    form.intensity === "hard" &&
+    form.duration === "90" &&
+    form.practiceTime === "15:45" &&
+    form.trainingType === "mixed" &&
+    form.currentHydration === "okay"
+  );
 }
 
 function getCalories(form) {
@@ -221,10 +229,10 @@ function getCarbFocus(form) {
     return "Keep most carbs around training, recovery, and higher-output parts of the day.";
   }
   if (form.goal === "gain") {
-    return "Push carbs hard before training, after training, and again at dinner for recovery and growth.";
+    return "Push carbs hardest before training, after training, and again at dinner for recovery and growth.";
   }
   if (form.trainingType === "endurance" || form.sport === "swimming" || form.intensity === "very-hard") {
-    return "Distribute carbs steadily through the day so energy stays high before and during training.";
+    return "Distribute carbs steadily across the day so energy stays high before and during training.";
   }
   return "Center carbs around training and recovery while keeping earlier meals balanced.";
 }
@@ -273,6 +281,29 @@ function lunchFoods(goal) {
   return "rice, potatoes, or pasta with protein and fruit";
 }
 
+function getGoalPhrase(goal) {
+  if (goal === "perform") return "performance";
+  if (goal === "gain") return "muscle gain";
+  if (goal === "lean") return "leaner performance";
+  return "maintenance";
+}
+
+function getPreviewSummary(form) {
+  if (!hasUserCustomized(form)) {
+    return "Built around your sport, training schedule, and performance goal.";
+  }
+
+  const sport = niceSportLabel(form.sport);
+  const sportText =
+    sport === "Track & Field" ? "track athlete" : sport.toLowerCase();
+
+  return `Built for a ${form.weight || "150"} lb ${sportText} focused on ${getGoalPhrase(
+    form.goal
+  )}, with ${form.intensity.replace("-", " ")} training and practice at ${formatTime(
+    toMinutes(form.practiceTime) ?? 945
+  )}.`;
+}
+
 function getThisIsForYouItems(form) {
   const sport = niceSportLabel(form.sport);
   return [
@@ -295,7 +326,6 @@ function buildPlan(form) {
   const fat = getFatGrams(calories, protein, carbs);
   const hydrationOz = getHydrationOunces(form);
   const duringTraining = getDuringTrainingHydration(form);
-  const carbFocus = getCarbFocus(form);
 
   const preFoods = preWorkoutFoods(form.stomachSensitivity);
   const recoveryFoods = postWorkoutFoods(form.goal);
@@ -307,7 +337,7 @@ function buildPlan(form) {
       : `Your PeakFuel ${athleteType} System`;
 
   const previewTitle = "Your Personalized Fuel System";
-  const previewSummary = `Built for a ${form.weight || "150"} lb ${athleteType.toLowerCase()} with ${goalLabel(form.goal).toLowerCase()} as the goal, ${form.intensity.replace("-", " ")} training, and practice at ${formatTime(practice)}.`;
+  const previewSummary = getPreviewSummary(form);
 
   const whyThisWorks =
     form.goal === "gain"
@@ -429,7 +459,7 @@ function buildPlan(form) {
     previewSummary,
     profileSummary: previewSummary,
     whyThisWorks,
-    carbFocus,
+    carbFocus: getCarbFocus(form),
     hydrationTarget: `${hydrationOz}–${hydrationOz + 16} oz/day`,
     duringTraining,
     macros: getMacroSummary(form, calories, protein, carbs, fat),
@@ -437,7 +467,6 @@ function buildPlan(form) {
     meetGameDay,
     recoveryTips,
     thisIsForYou: getThisIsForYouItems(form),
-    athleteType,
   };
 }
 
@@ -474,6 +503,8 @@ function LandingPage({
   savePreview,
   leadMessage,
 }) {
+  const customized = hasUserCustomized(form);
+
   return (
     <>
       <section style={styles.heroWrap}>
@@ -498,8 +529,8 @@ function LandingPage({
           </header>
 
           <div style={styles.heroGrid}>
-            <div>
-              <div style={styles.badge}>Built for real athlete schedules</div>
+            <div style={styles.heroLeft}>
+              <div style={styles.badge}>Built around real training schedules</div>
 
               <h1 style={styles.heroTitle}>
                 Stop guessing what to eat. Fuel like a real athlete.
@@ -507,8 +538,8 @@ function LandingPage({
 
               <p style={styles.heroText}>
                 PeakFuel builds your exact daily eating schedule, macro targets,
-                hydration, and recovery strategy based on your sport, training time,
-                workload, and goals.
+                hydration, and recovery strategy based on your sport, training
+                time, workload, and goals.
               </p>
 
               <div style={styles.heroButtons}>
@@ -534,15 +565,21 @@ function LandingPage({
                 <div style={styles.previewMetricsGrid}>
                   <div style={styles.metricCard}>
                     <div style={styles.metricLabel}>Protein</div>
-                    <div style={styles.metricValue}>{plan.macros.protein}</div>
+                    <div style={styles.metricValue}>
+                      {customized ? plan.macros.protein : "Personalized"}
+                    </div>
                   </div>
                   <div style={styles.metricCard}>
                     <div style={styles.metricLabel}>Carbs</div>
-                    <div style={styles.metricValue}>{plan.macros.carbs}</div>
+                    <div style={styles.metricValue}>
+                      {customized ? plan.macros.carbs : "Calculated"}
+                    </div>
                   </div>
                   <div style={styles.metricCard}>
                     <div style={styles.metricLabel}>Hydration</div>
-                    <div style={styles.metricValue}>{plan.hydrationTarget}</div>
+                    <div style={styles.metricValue}>
+                      {customized ? plan.hydrationTarget : "Built from inputs"}
+                    </div>
                   </div>
                 </div>
 
@@ -562,8 +599,8 @@ function LandingPage({
                   <div style={styles.lockedTitle}>Unlock your full fuel system</div>
                   <div style={styles.lockedText}>
                     Get your full day structure, exact macros, hydration target,
-                    pre / during / post-workout strategy, meet or game day version,
-                    and recovery guidance built from your inputs.
+                    pre / during / post-workout strategy, meet or game day
+                    version, and recovery guidance built from your inputs.
                   </div>
 
                   <div style={styles.lockedFeatureGrid}>
@@ -628,8 +665,8 @@ function LandingPage({
           <div>
             <SectionHeading
               eyebrow="Builder"
-              title="Build your full plan with more specific inputs"
-              text="The more accurate your schedule, habits, and training details are, the stronger your final system becomes."
+              title="Build your personalized fuel system"
+              text="Add your sport, schedule, training load, and recovery details so your plan feels specific, useful, and worth buying."
             />
 
             <div style={styles.formCard}>
@@ -894,9 +931,11 @@ function LandingPage({
 
             <div style={styles.quoteCard}>
               <div style={styles.quoteText}>
-                “This feels like something an athlete would actually use, not just generic nutrition advice.”
+                Built to feel specific, practical, and worth the purchase.
               </div>
-              <div style={styles.quoteSub}>Built to feel practical, specific, and worth buying.</div>
+              <div style={styles.quoteSub}>
+                Not generic meal tips. A real structure athletes can actually follow.
+              </div>
             </div>
           </div>
         </div>
@@ -906,7 +945,7 @@ function LandingPage({
         <div style={styles.container}>
           <SectionHeading
             eyebrow="Pricing"
-            title="One simple purchase. Instant access."
+            title="One payment. Full access."
             text="A one-time purchase for your full personalized athlete fueling system."
             center
           />
@@ -1196,13 +1235,13 @@ const styles = {
   containerSection: {
     maxWidth: 1200,
     margin: "0 auto",
-    padding: "32px 24px 96px",
+    padding: "28px 24px 64px",
   },
 
   containerSectionTight: {
     maxWidth: 1200,
     margin: "0 auto",
-    padding: "12px 24px 96px",
+    padding: "8px 24px 56px",
   },
 
   heroWrap: {
@@ -1284,10 +1323,14 @@ const styles = {
     position: "relative",
     zIndex: 2,
     display: "grid",
-    gridTemplateColumns: "1.05fr 0.95fr",
-    gap: 48,
+    gridTemplateColumns: "1.02fr 0.98fr",
+    gap: 40,
     alignItems: "center",
-    padding: "72px 0 88px",
+    padding: "48px 0 72px",
+  },
+
+  heroLeft: {
+    paddingTop: 8,
   },
 
   badge: {
@@ -1305,22 +1348,22 @@ const styles = {
     fontSize: 66,
     lineHeight: 1.01,
     letterSpacing: "-0.05em",
-    margin: "24px 0 0",
-    maxWidth: 760,
+    margin: "20px 0 0",
+    maxWidth: 640,
   },
 
   heroText: {
-    marginTop: 24,
-    maxWidth: 700,
+    marginTop: 18,
+    maxWidth: 620,
     color: "#52525b",
-    fontSize: 20,
-    lineHeight: 1.7,
+    fontSize: 19,
+    lineHeight: 1.65,
   },
 
   heroButtons: {
     display: "flex",
     gap: 16,
-    marginTop: 32,
+    marginTop: 28,
     flexWrap: "wrap",
   },
 
@@ -1328,7 +1371,7 @@ const styles = {
     display: "flex",
     gap: 10,
     flexWrap: "wrap",
-    marginTop: 22,
+    marginTop: 20,
   },
 
   heroTrustPill: {
@@ -1427,6 +1470,7 @@ const styles = {
     color: "rgba(255,255,255,0.9)",
     lineHeight: 1.7,
     fontSize: 15,
+    minHeight: 52,
   },
 
   previewListWrap: {
@@ -1558,7 +1602,7 @@ const styles = {
 
   lightSection: {
     background: "#ffffff",
-    padding: "72px 0 18px",
+    padding: "56px 0 12px",
   },
 
   forYouSection: {
@@ -1619,7 +1663,7 @@ const styles = {
   twoCol: {
     display: "grid",
     gridTemplateColumns: "1fr 0.92fr",
-    gap: 36,
+    gap: 32,
     alignItems: "start",
   },
 
@@ -1647,7 +1691,7 @@ const styles = {
   },
 
   formCard: {
-    marginTop: 28,
+    marginTop: 24,
     border: "1px solid #e4e4e7",
     borderRadius: 32,
     background: "linear-gradient(135deg, #ffffff, #fafafa)",
@@ -1734,7 +1778,7 @@ const styles = {
   },
 
   quoteCard: {
-    marginTop: 18,
+    marginTop: 16,
     border: "1px solid #e4e4e7",
     borderRadius: 28,
     background: "#fafafa",
@@ -1758,14 +1802,14 @@ const styles = {
   pricingSection: {
     background: "#09090b",
     color: "white",
-    padding: "96px 0",
+    padding: "72px 0",
   },
 
   pricingGridSingle: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 560px)",
     justifyContent: "center",
-    marginTop: 38,
+    marginTop: 34,
   },
 
   priceCardHero: {
@@ -2014,7 +2058,9 @@ const globalCss = `
   html { scroll-behavior: smooth; }
   * { box-sizing: border-box; }
   body { margin: 0; background: #ffffff; }
-  a, button { transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease; }
+  a, button {
+    transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease;
+  }
   a:hover, button:hover { transform: translateY(-1px); }
   input:focus, select:focus {
     border-color: #38bdf8 !important;
@@ -2022,7 +2068,7 @@ const globalCss = `
   }
 
   @media (max-width: 1100px) {
-    div[style*="grid-template-columns: 1.05fr 0.95fr"],
+    div[style*="grid-template-columns: 1.02fr 0.98fr"],
     div[style*="grid-template-columns: 1fr 0.92fr"],
     div[style*="grid-template-columns: 1fr 1fr"],
     div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"],
