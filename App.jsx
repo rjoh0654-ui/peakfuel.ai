@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 const checkoutLinks = {
-  instant: "https://buy.stripe.com/your-instant-athlete-fuel-plan-link",
+  instant: "PASTE_YOUR_REAL_STRIPE_PAYMENT_LINK_HERE",
 };
 
 const STORAGE_KEY = "peakfuel_checkout_plan";
