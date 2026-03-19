@@ -131,15 +131,15 @@ function clamp(num, min, max) {
 }
 
 function hasUserCustomized(form) {
-  return !(
-    form.sport === "swimming" &&
-    form.goal === "perform" &&
-    form.weight === "150" &&
-    form.intensity === "hard" &&
-    form.duration === "90" &&
-    form.practiceTime === "15:45" &&
-    form.trainingType === "mixed" &&
-    form.currentHydration === "okay"
+  return Boolean(
+    form.sport ||
+      form.goal ||
+      form.weight ||
+      form.intensity ||
+      form.duration ||
+      form.practiceTime ||
+      form.trainingType ||
+      form.currentHydration
   );
 }
 
@@ -289,15 +289,14 @@ function getGoalPhrase(goal) {
 }
 
 function getPreviewSummary(form) {
-  if (!hasUserCustomized(form)) {
+  if (!form.sport || !form.goal || !form.intensity || !form.practiceTime || !form.weight) {
     return "Built around your sport, training schedule, and performance goal.";
   }
 
   const sport = niceSportLabel(form.sport);
-  const sportText =
-    sport === "Track & Field" ? "track athlete" : sport.toLowerCase();
+  const sportText = sport === "Track & Field" ? "track athlete" : sport.toLowerCase();
 
-  return `Built for a ${form.weight || "150"} lb ${sportText} focused on ${getGoalPhrase(
+  return `Built for a ${form.weight} lb ${sportText} focused on ${getGoalPhrase(
     form.goal
   )}, with ${form.intensity.replace("-", " ")} training and practice at ${formatTime(
     toMinutes(form.practiceTime) ?? 945
@@ -305,7 +304,7 @@ function getPreviewSummary(form) {
 }
 
 function getThisIsForYouItems(form) {
-  const sport = niceSportLabel(form.sport);
+  const sport = form.sport ? niceSportLabel(form.sport) : "your sport";
   return [
     `You train hard in ${sport} but still guess what to eat before practice.`,
     "You feel low-energy, flat, or underfueled during training.",
@@ -393,7 +392,10 @@ function buildPlan(form) {
       time: formatTime(practice),
       title: "During Training Strategy",
       desc: "Do not wait until you feel flat. Your hydration and electrolytes should already be working for you.",
-      macros: form.doubleDay || form.intensity === "very-hard" ? "Add carbs if needed during long or high-output sessions" : "Hydration-first approach",
+      macros:
+        form.doubleDay || form.intensity === "very-hard"
+          ? "Add carbs if needed during long or high-output sessions"
+          : "Hydration-first approach",
       hydration: `During training: ${duringTraining}`,
       examples:
         form.intensity === "very-hard" || form.doubleDay
@@ -447,7 +449,7 @@ function buildPlan(form) {
   const recoveryTips = [
     `Protein target: ${protein}g/day split across the day instead of all at night.`,
     `Hydration target: ${hydrationOz}–${hydrationOz + 16} oz/day.`,
-    `Sleep matters more when soreness is ${form.soreness}. Protect your last meal and hydration.`,
+    `Sleep matters more when soreness is ${form.soreness || "medium"}. Protect your last meal and hydration.`,
     form.caffeine === "daily"
       ? "Be careful not to rely on caffeine to cover up underfueling."
       : "Do not use caffeine as your whole energy strategy.",
@@ -510,7 +512,7 @@ function LandingPage({
       <section style={styles.heroWrap}>
         <div style={styles.gridBg} />
         <div style={styles.container}>
-          <header style={styles.header}>
+          <header style={styles.header} className="mobile-header">
             <div style={styles.logoWrap}>
               <div style={styles.logo}>PF</div>
               <div>
@@ -562,20 +564,20 @@ function LandingPage({
               </div>
 
               <div id="preview" style={styles.previewListWrap}>
-                <div style={styles.previewMetricsGrid}>
-                  <div style={styles.metricCard}>
+                <div style={styles.previewMetricsGrid} className="preview-metrics-grid">
+                  <div style={styles.metricCard} className="metric-card">
                     <div style={styles.metricLabel}>Protein</div>
                     <div style={styles.metricValue}>
                       {customized ? plan.macros.protein : "Personalized"}
                     </div>
                   </div>
-                  <div style={styles.metricCard}>
+                  <div style={styles.metricCard} className="metric-card">
                     <div style={styles.metricLabel}>Carbs</div>
                     <div style={styles.metricValue}>
                       {customized ? plan.macros.carbs : "Calculated"}
                     </div>
                   </div>
-                  <div style={styles.metricCard}>
+                  <div style={styles.metricCard} className="metric-card">
                     <div style={styles.metricLabel}>Hydration</div>
                     <div style={styles.metricValue}>
                       {customized ? plan.hydrationTarget : "Built from inputs"}
@@ -686,6 +688,7 @@ function LandingPage({
                     onChange={(e) => updateField("sport", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select sport</option>
                     {sports.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -698,6 +701,7 @@ function LandingPage({
                     onChange={(e) => updateField("goal", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select goal</option>
                     {goals.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -710,6 +714,7 @@ function LandingPage({
                     onChange={(e) => updateField("ageRange", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select age range</option>
                     {ageRanges.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -740,6 +745,7 @@ function LandingPage({
                     onChange={(e) => updateField("intensity", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select intensity</option>
                     {intensityLevels.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -761,6 +767,7 @@ function LandingPage({
                     onChange={(e) => updateField("trainingType", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select training type</option>
                     {trainingTypeOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -773,6 +780,7 @@ function LandingPage({
                     onChange={(e) => updateField("bodyGoal", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select body goal</option>
                     {bodyGoalOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -821,6 +829,7 @@ function LandingPage({
                     onChange={(e) => updateField("stomachSensitivity", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select stomach type</option>
                     {stomachOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -833,6 +842,7 @@ function LandingPage({
                     onChange={(e) => updateField("currentHydration", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select hydration habits</option>
                     {hydrationOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -845,6 +855,7 @@ function LandingPage({
                     onChange={(e) => updateField("caffeine", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select caffeine use</option>
                     {caffeineOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -857,6 +868,7 @@ function LandingPage({
                     onChange={(e) => updateField("competitionFrequency", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select frequency</option>
                     {competitionOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -869,6 +881,7 @@ function LandingPage({
                     onChange={(e) => updateField("eatingPattern", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select structure</option>
                     {eatingPatternOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -881,6 +894,7 @@ function LandingPage({
                     onChange={(e) => updateField("soreness", e.target.value)}
                     style={styles.input}
                   >
+                    <option value="">Select soreness level</option>
                     {sorenessOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -1108,26 +1122,26 @@ function ResultsPage({ plan, isPaid }) {
 export default function PeakFuelWebsite() {
   const [form, setForm] = useState({
     email: "",
-    sport: "swimming",
-    goal: "perform",
-    ageRange: "16-18",
-    weight: "150",
+    sport: "",
+    goal: "",
+    ageRange: "",
+    weight: "",
     height: "",
-    intensity: "hard",
-    duration: "90",
-    trainingType: "mixed",
-    bodyGoal: "maintain",
-    wakeTime: "06:30",
-    schoolStart: "08:00",
-    practiceTime: "15:45",
-    bedTime: "22:30",
+    intensity: "",
+    duration: "",
+    trainingType: "",
+    bodyGoal: "",
+    wakeTime: "",
+    schoolStart: "",
+    practiceTime: "",
+    bedTime: "",
     doubleDay: false,
-    stomachSensitivity: "normal",
-    currentHydration: "okay",
-    caffeine: "none",
-    competitionFrequency: "sometimes",
-    eatingPattern: "somewhat",
-    soreness: "medium",
+    stomachSensitivity: "",
+    currentHydration: "",
+    caffeine: "",
+    competitionFrequency: "",
+    eatingPattern: "",
+    soreness: "",
   });
 
   const [leadMessage, setLeadMessage] = useState("");
@@ -1494,6 +1508,10 @@ const styles = {
     background: "#fafafa",
     borderRadius: 20,
     padding: 14,
+    minHeight: 132,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-start",
   },
 
   metricLabel: {
@@ -1508,7 +1526,8 @@ const styles = {
     marginTop: 8,
     fontWeight: 800,
     fontSize: 18,
-    lineHeight: 1.4,
+    lineHeight: 1.25,
+    overflowWrap: "anywhere",
   },
 
   previewItem: {
@@ -1720,6 +1739,7 @@ const styles = {
     background: "white",
     fontSize: 15,
     outline: "none",
+    height: 56,
   },
 
   checkboxRow: {
@@ -2077,10 +2097,17 @@ const globalCss = `
   }
 
   @media (max-width: 1100px) {
+    .mobile-header,
     div[style*="grid-template-columns: 1.02fr 0.98fr"],
     div[style*="grid-template-columns: 1fr 0.92fr"],
     div[style*="grid-template-columns: 1fr 1fr"],
     div[style*="grid-template-columns: repeat(4, minmax(0,1fr))"] {
+      grid-template-columns: 1fr !important;
+    }
+
+    div[style*="grid-template-columns: 1.02fr 0.98fr"],
+    div[style*="grid-template-columns: 1fr 0.92fr"],
+    div[style*="grid-template-columns: 1fr 1fr"] {
       grid-template-columns: 1fr !important;
     }
   }
@@ -2109,29 +2136,21 @@ const globalCss = `
       gap: 24px !important;
     }
 
-    div[style*="padding: 16px"][style*="margin-top: 24px"][style*="border-radius: 28px"] {
-      padding: 18px !important;
-    }
-
-    div[style*="display: flex"][style*="justify-content: space-between"][style*="backdrop-filter: blur(12px)"] {
+    .mobile-header {
       flex-direction: column !important;
       align-items: stretch !important;
       gap: 18px !important;
+      padding: 18px !important;
     }
 
-    div[style*="display: flex"][style*="gap: 24px"][style*="align-items: center"][style*="flex-wrap: wrap"] {
+    .mobile-header nav {
       justify-content: center !important;
       gap: 16px !important;
     }
 
-    a[style*="padding: 12px 16px"][style*="border-radius: 16px"] {
+    .mobile-header a[href="#builder"] {
       width: 100% !important;
       text-align: center !important;
-    }
-
-    div[style*="gap: 24px"][style*="flex-wrap: wrap"] {
-      gap: 12px !important;
-      justify-content: flex-start !important;
     }
 
     div[style*="margin-top: 28px"][style*="flex-wrap: wrap"] {
@@ -2170,28 +2189,18 @@ const globalCss = `
       border-radius: 24px !important;
     }
 
-    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
-      grid-template-columns: 1fr !important;
-    }
-
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] {
+    .preview-metrics-grid {
       grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+      gap: 12px !important;
     }
 
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] > div:last-child {
+    .preview-metrics-grid .metric-card:last-child {
       grid-column: 1 / -1 !important;
     }
 
-    div[style*="background: #fafafa"][style*="border-radius: 20px"][style*="padding: 14px"] {
+    .metric-card {
+      min-height: 110px !important;
       padding: 16px !important;
-      min-height: 120px !important;
-    }
-
-    div[style*="margin-top: 8px"][style*="font-weight: 800"][style*="font-size: 18px"] {
-      font-size: 17px !important;
-      line-height: 1.25 !important;
-      word-break: normal !important;
-      overflow-wrap: anywhere !important;
     }
 
     div[style*="display: flex"][style*="border-radius: 24px"][style*="margin-bottom: 12px"] {
@@ -2203,12 +2212,6 @@ const globalCss = `
       min-width: 0 !important;
       width: fit-content !important;
       padding: 10px 14px !important;
-    }
-
-    div[style*="font-size: 18px"][style*="line-height: 1.4"][style*="font-weight: 800"] {
-      font-size: 16px !important;
-      line-height: 1.35 !important;
-      word-break: break-word !important;
     }
 
     div[style*="padding: 18px"][style*="margin-top: 6px"][style*="border-radius: 28px"] {
@@ -2247,12 +2250,6 @@ const globalCss = `
       padding: 18px !important;
     }
 
-    div[style*="font-size: 18px"][style*="font-weight: 800"] {
-      font-size: 16px !important;
-      line-height: 1.25 !important;
-      word-break: break-word !important;
-    }
-
     div[style*="margin: 12px 0 0"][style*="font-size: 46px"] {
       font-size: 30px !important;
       line-height: 1.08 !important;
@@ -2279,8 +2276,8 @@ const globalCss = `
       min-height: 56px !important;
       padding: 0 14px !important;
       line-height: 56px !important;
-      -webkit-appearance: none;
       appearance: none;
+      -webkit-appearance: none;
     }
 
     label[style*="padding: 16px"][style*="border-radius: 18px"] {
