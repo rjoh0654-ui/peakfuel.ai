@@ -1,25 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const siteUrl =
-  import.meta.env.VITE_SITE_URL ||
-  (typeof window !== "undefined" ? window.location.origin : "");
+const checkoutLinks = {
+  instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
+};
 
-const supabase =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-        },
-      })
-    : null;
-
-const STORAGE_KEY = "peakfuel_checkout_plan_v4";
-const SAVED_PLANS_KEY = "peakfuel_saved_plans_v2";
+const STORAGE_KEY = "peakfuel_checkout_plan_v3";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -221,11 +206,7 @@ function getHydrationOunces(form) {
 }
 
 function getDuringTrainingHydration(form) {
-  if (
-    form.intensity === "very-hard" ||
-    Number(form.duration) >= 90 ||
-    form.doubleDay
-  ) {
+  if (form.intensity === "very-hard" || Number(form.duration) >= 90 || form.doubleDay) {
     return "16–28 oz per hour + electrolytes";
   }
   if (form.intensity === "hard") {
@@ -250,11 +231,7 @@ function getCarbFocus(form) {
   if (form.goal === "gain") {
     return "Push carbs hardest before training, after training, and again at dinner for recovery and growth.";
   }
-  if (
-    form.trainingType === "endurance" ||
-    form.sport === "swimming" ||
-    form.intensity === "very-hard"
-  ) {
+  if (form.trainingType === "endurance" || form.sport === "swimming" || form.intensity === "very-hard") {
     return "Distribute carbs steadily across the day so energy stays high before and during training.";
   }
   return "Center carbs around training and recovery while keeping earlier meals balanced.";
@@ -264,13 +241,7 @@ function preWorkoutFoods(stomachSensitivity) {
   if (stomachSensitivity === "sensitive") {
     return ["banana", "applesauce pouch", "toast + honey", "sports drink", "rice cakes"];
   }
-  return [
-    "bagel + honey",
-    "banana + granola bar",
-    "pretzels + fruit",
-    "rice cakes + jam",
-    "toast + peanut butter",
-  ];
+  return ["bagel + honey", "banana + granola bar", "pretzels + fruit", "rice cakes + jam", "toast + peanut butter"];
 }
 
 function postWorkoutFoods(goal) {
@@ -305,10 +276,8 @@ function breakfastFoods(goal) {
 }
 
 function lunchFoods(goal) {
-  if (goal === "gain")
-    return "rice or pasta, protein, fruit, and an added carb like bread or potatoes";
-  if (goal === "lean")
-    return "rice or potatoes, lean protein, fruit, and vegetables";
+  if (goal === "gain") return "rice or pasta, protein, fruit, and an added carb like bread or potatoes";
+  if (goal === "lean") return "rice or potatoes, lean protein, fruit, and vegetables";
   return "rice, potatoes, or pasta with protein and fruit";
 }
 
@@ -424,10 +393,7 @@ function buildPlan(form) {
       time: formatTime(practice),
       title: "During Training Strategy",
       desc: "Do not wait until you feel flat. Your hydration and electrolytes should already be working for you.",
-      macros:
-        form.doubleDay || form.intensity === "very-hard"
-          ? "Add carbs if needed during long or high-output sessions"
-          : "Hydration-first approach",
+      macros: form.doubleDay || form.intensity === "very-hard" ? "Add carbs if needed during long or high-output sessions" : "Hydration-first approach",
       hydration: `During training: ${duringTraining}`,
       examples:
         form.intensity === "very-hard" || form.doubleDay
@@ -504,65 +470,6 @@ function buildPlan(form) {
   };
 }
 
-function getSavedPlans() {
-  try {
-    const raw = localStorage.getItem(SAVED_PLANS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function savePlanToLibrary(entry) {
-  try {
-    const existing = getSavedPlans();
-    const next = [entry, ...existing.filter((item) => item.id !== entry.id)].slice(0, 25);
-    localStorage.setItem(SAVED_PLANS_KEY, JSON.stringify(next));
-    return next;
-  } catch {
-    return [];
-  }
-}
-
-function deleteSavedPlanFromLibrary(id) {
-  try {
-    const existing = getSavedPlans();
-    const next = existing.filter((item) => item.id !== id);
-    localStorage.setItem(SAVED_PLANS_KEY, JSON.stringify(next));
-    return next;
-  } catch {
-    return [];
-  }
-}
-
-function buildSavedPlanEntry(form, plan, isPaid) {
-  const now = new Date().toISOString();
-  return {
-    id: `plan_${Date.now()}`,
-    createdAt: now,
-    updatedAt: now,
-    name: `${niceSportLabel(form.sport)} Fuel Plan`,
-    email: form.email || "",
-    form,
-    plan,
-    isPaid,
-  };
-}
-
-function downloadPlanFile(planEntry) {
-  const blob = new Blob([JSON.stringify(planEntry, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${planEntry.name.replace(/\s+/g, "-").toLowerCase()}-${planEntry.id}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 function Field({ label, children }) {
   return (
     <div>
@@ -588,53 +495,6 @@ function SectionHeading({ eyebrow, title, text, center = false }) {
   );
 }
 
-function AuthBar({
-  authReady,
-  user,
-  authEmail,
-  setAuthEmail,
-  sendMagicLink,
-  signOut,
-}) {
-  return (
-    <div style={styles.authBar}>
-      <div>
-        <div style={styles.authBarTitle}>
-          {user ? "Account connected" : "Save to your account"}
-        </div>
-        <div style={styles.authBarText}>
-          {user
-            ? `Signed in as ${user.email}`
-            : "Use a magic link so paid plans are saved to your dashboard."}
-        </div>
-      </div>
-
-      {user ? (
-        <button onClick={signOut} style={styles.secondaryBtnButton}>
-          Sign out
-        </button>
-      ) : (
-        <div style={styles.authActions}>
-          <input
-            value={authEmail}
-            onChange={(e) => setAuthEmail(e.target.value)}
-            placeholder="you@example.com"
-            style={styles.authInput}
-            disabled={!authReady}
-          />
-          <button
-            onClick={sendMagicLink}
-            style={styles.primaryDarkButton}
-            disabled={!authReady}
-          >
-            Email me a magic link
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function LandingPage({
   form,
   updateField,
@@ -642,7 +502,6 @@ function LandingPage({
   startCheckout,
   savePreview,
   leadMessage,
-  authNode,
 }) {
   const customized = hasUserCustomized(form);
 
@@ -664,13 +523,10 @@ function LandingPage({
               <a href="#builder" style={styles.navLink}>Builder</a>
               <a href="#preview" style={styles.navLink}>Preview</a>
               <a href="#pricing" style={styles.navLink}>Pricing</a>
-              <a href="/dashboard" style={styles.navLink}>Dashboard</a>
             </nav>
 
             <a href="#builder" style={styles.headerCta}>Build My System</a>
           </header>
-
-          {authNode}
 
           <div style={styles.heroGrid}>
             <div style={styles.heroLeft}>
@@ -1124,99 +980,18 @@ function LandingPage({
   );
 }
 
-function SavedPlansPanel({
-  savedPlans,
-  loadSavedPlan,
-  deleteSavedPlan,
-  downloadSavedPlan,
-}) {
-  return (
-    <section style={styles.containerSection}>
-      <div style={styles.savedPlansCard}>
-        <div style={styles.savedPlansTopRow}>
-          <div>
-            <div style={styles.savedPlansEyebrow}>Your library</div>
-            <div style={styles.savedPlansTitle}>Saved on this device</div>
-            <div style={styles.savedPlansText}>
-              Previews and plan backups saved locally in this browser.
-            </div>
-          </div>
-        </div>
-
-        {savedPlans.length === 0 ? (
-          <div style={styles.savedEmptyState}>
-            No saved plans yet.
-          </div>
-        ) : (
-          <div style={styles.savedPlansList}>
-            {savedPlans.map((item) => (
-              <div key={item.id} style={styles.savedPlanRow}>
-                <div style={{ flex: 1 }}>
-                  <div style={styles.savedPlanName}>{item.name}</div>
-                  <div style={styles.savedPlanMeta}>
-                    {item.isPaid ? "Unlocked plan" : "Preview"} •{" "}
-                    {new Date(item.updatedAt || item.createdAt).toLocaleString()}
-                  </div>
-                </div>
-
-                <div style={styles.savedPlanActions}>
-                  <button
-                    onClick={() => loadSavedPlan(item)}
-                    style={styles.savedActionPrimary}
-                  >
-                    Load
-                  </button>
-
-                  <button
-                    onClick={() => downloadSavedPlan(item)}
-                    style={styles.savedActionSecondary}
-                  >
-                    Download
-                  </button>
-
-                  <button
-                    onClick={() => deleteSavedPlan(item.id)}
-                    style={styles.savedActionSecondary}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ResultsPage({
-  plan,
-  isPaid,
-  saveUnlockedPlan,
-  goHome,
-  openDashboard,
-  checkoutState,
-}) {
+function ResultsPage({ plan, isPaid }) {
   if (!isPaid) {
     return (
       <section style={styles.resultsHero}>
         <div style={styles.container}>
           <div style={styles.resultsCard}>
             <div style={styles.lockedBadge}>Locked</div>
-            <h1 style={styles.resultsTitle}>Your payment is still being confirmed.</h1>
+            <h1 style={styles.resultsTitle}>This plan is not unlocked yet.</h1>
             <p style={styles.resultsText}>
-              {checkoutState ||
-                "Once payment is confirmed, your plan will be saved to your account and emailed automatically."}
+              Complete checkout first, then return here to see your full system.
             </p>
-            <div style={styles.resultsTopActions}>
-              <button onClick={openDashboard} style={styles.primaryDarkButton}>
-                Open dashboard
-              </button>
-              <button onClick={goHome} style={styles.secondaryBtnButton}>
-                Go home
-              </button>
-            </div>
+            <a href="/" style={styles.primaryBtn}>Go back</a>
           </div>
         </div>
       </section>
@@ -1230,18 +1005,6 @@ function ResultsPage({
           <div style={styles.successBadge}>Unlocked</div>
           <h1 style={styles.resultsTitle}>{plan.title}</h1>
           <p style={styles.resultsText}>{plan.profileSummary}</p>
-
-          <div style={styles.resultsTopActions}>
-            <button onClick={saveUnlockedPlan} style={styles.primaryDarkButton}>
-              Save local backup
-            </button>
-            <button onClick={() => window.print()} style={styles.secondaryBtnButton}>
-              Print / Save PDF
-            </button>
-            <button onClick={openDashboard} style={styles.secondaryBtnButton}>
-              Open dashboard
-            </button>
-          </div>
 
           <div style={styles.resultsSummaryGridFour}>
             <div style={styles.summaryBox}>
@@ -1281,6 +1044,7 @@ function ResultsPage({
 
           <div style={styles.sectionBlock}>
             <div style={styles.resultsBlockTitle}>Your full day schedule</div>
+
             <div style={styles.fullPlanWrap}>
               {plan.items.map((item) => (
                 <div key={item.time + item.title} style={styles.fullPlanItem}>
@@ -1331,87 +1095,10 @@ function ResultsPage({
           <div style={styles.noteBox}>
             This is general educational fueling guidance, not medical advice. Adjust for allergies, preferences, medical needs, and coach or dietitian guidance.
           </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
-function DashboardPage({
-  user,
-  dashboardPlans,
-  refreshDashboard,
-  loadingDashboard,
-  openPlan,
-  signOut,
-  goHome,
-}) {
-  return (
-    <section style={styles.resultsHero}>
-      <div style={styles.container}>
-        <div style={styles.resultsCard}>
-          <div style={styles.successBadge}>Dashboard</div>
-          <h1 style={styles.resultsTitle}>Your saved PeakFuel plans</h1>
-          <p style={styles.resultsText}>
-            {user
-              ? `Signed in as ${user.email}`
-              : "Sign in to view plans saved to your account."}
-          </p>
-
-          <div style={styles.resultsTopActions}>
-            <button onClick={goHome} style={styles.secondaryBtnButton}>
-              Home
-            </button>
-            {user ? (
-              <>
-                <button onClick={refreshDashboard} style={styles.secondaryBtnButton}>
-                  Refresh
-                </button>
-                <button onClick={signOut} style={styles.secondaryBtnButton}>
-                  Sign out
-                </button>
-              </>
-            ) : null}
+          <div style={{ marginTop: 20 }}>
+            <a href="/" style={styles.secondaryBtn}>Build another plan</a>
           </div>
-
-          {!user ? (
-            <div style={styles.savedEmptyState}>
-              Go back home and send yourself a magic link first.
-            </div>
-          ) : loadingDashboard ? (
-            <div style={styles.savedEmptyState}>Loading your plans…</div>
-          ) : dashboardPlans.length === 0 ? (
-            <div style={styles.savedEmptyState}>
-              No paid plans found yet. After a successful checkout, the Stripe webhook should save the plan here and email it automatically.
-            </div>
-          ) : (
-            <div style={styles.savedPlansList}>
-              {dashboardPlans.map((item) => (
-                <div key={item.id} style={styles.savedPlanRow}>
-                  <div style={{ flex: 1 }}>
-                    <div style={styles.savedPlanName}>
-                      {item.plan_name || `${niceSportLabel(item.sport)} Fuel Plan`}
-                    </div>
-                    <div style={styles.savedPlanMeta}>
-                      {new Date(item.created_at).toLocaleString()}
-                    </div>
-                    <div style={styles.savedPlanMeta}>
-                      {item.email || user.email}
-                    </div>
-                  </div>
-
-                  <div style={styles.savedPlanActions}>
-                    <button
-                      onClick={() => openPlan(item)}
-                      style={styles.savedActionPrimary}
-                    >
-                      Open
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </section>
@@ -1444,78 +1131,37 @@ export default function PeakFuelWebsite() {
   });
 
   const [leadMessage, setLeadMessage] = useState("");
-  const [toastMessage, setToastMessage] = useState("");
   const [isPaid, setIsPaid] = useState(false);
-  const [path, setPath] = useState(window.location.pathname || "/");
-  const [savedPlans, setSavedPlans] = useState([]);
-  const [authEmail, setAuthEmail] = useState("");
-  const [user, setUser] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [dashboardPlans, setDashboardPlans] = useState([]);
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
-  const [checkoutState, setCheckoutState] = useState("");
+  const [path, setPath] = useState("/");
 
   const plan = useMemo(() => buildPlan(form), [form]);
 
-  function showToast(message) {
-    setToastMessage(message);
-    window.clearTimeout(window.__peakfuelToastTimer);
-    window.__peakfuelToastTimer = window.setTimeout(() => {
-      setToastMessage("");
-    }, 2500);
-  }
+  useEffect(() => {
+    const currentPath = window.location.pathname || "/";
+    setPath(currentPath);
+
+    const params = new URLSearchParams(window.location.search);
+    const paid = params.get("paid");
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed?.form) {
+          setForm((prev) => ({ ...prev, ...parsed.form }));
+        }
+      } catch (error) {
+        console.error("Could not restore saved plan.", error);
+      }
+    }
+
+    if (paid === "1") {
+      setIsPaid(true);
+    }
+  }, []);
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
-    if (key === "email") setAuthEmail(value);
-  }
-
-  function persistCurrentPayload(nextIsPaid = false) {
-    const payload = {
-      email: form.email,
-      form,
-      plan,
-      isPaid: nextIsPaid,
-      savedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    return payload;
-  }
-
-  async function sendMagicLink() {
-    if (!supabase) {
-      showToast("Missing Supabase environment variables.");
-      return;
-    }
-
-    const email = (authEmail || form.email || "").trim();
-    if (!email) {
-      showToast("Enter your email first.");
-      return;
-    }
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${siteUrl}/dashboard`,
-      },
-    });
-
-    if (error) {
-      showToast(error.message || "Could not send magic link.");
-      return;
-    }
-
-    setForm((prev) => ({ ...prev, email }));
-    showToast("Magic link sent.");
-  }
-
-  async function signOut() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
-    setUser(null);
-    setDashboardPlans([]);
-    showToast("Signed out.");
   }
 
   function savePreview() {
@@ -1524,302 +1170,48 @@ export default function PeakFuelWebsite() {
       return;
     }
 
-    const payload = persistCurrentPayload(false);
-    const entry = buildSavedPlanEntry(payload.form, payload.plan, false);
-    const updated = savePlanToLibrary(entry);
-    setSavedPlans(updated);
+    const payload = {
+      email: form.email,
+      form,
+      plan,
+      savedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     setLeadMessage("Preview saved to this device.");
-    showToast("Preview saved.");
   }
 
-  function saveUnlockedPlan() {
-    const payload = persistCurrentPayload(true);
-    const entry = buildSavedPlanEntry(payload.form, payload.plan, true);
-    const updated = savePlanToLibrary(entry);
-    setSavedPlans(updated);
-    showToast("Local backup saved.");
-  }
-
-  function loadSavedPlan(savedItem) {
-    if (!savedItem?.form || !savedItem?.plan) return;
-    setForm(savedItem.form);
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        email: savedItem.email || savedItem.form.email || "",
-        form: savedItem.form,
-        plan: savedItem.plan,
-        isPaid: !!savedItem.isPaid,
-        savedAt: new Date().toISOString(),
-      })
-    );
-    setIsPaid(!!savedItem.isPaid);
-    const nextPath = savedItem.isPaid ? "/results" : "/";
-    setPath(nextPath);
-    window.history.pushState({}, "", nextPath);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    showToast("Saved plan loaded.");
-  }
-
-  function deleteSavedPlan(id) {
-    const updated = deleteSavedPlanFromLibrary(id);
-    setSavedPlans(updated);
-    showToast("Saved plan deleted.");
-  }
-
-  function downloadSavedPlan(item) {
-    downloadPlanFile(item);
-    showToast("Download started.");
-  }
-
-  async function startCheckout() {
-    const email = form.email.trim();
-    if (!email) {
+  function startCheckout() {
+    if (!form.email.trim()) {
       setLeadMessage("Enter your email first before unlocking your full system.");
       return;
     }
 
-    persistCurrentPayload(false);
-
-    try {
-      setLeadMessage("Redirecting to secure checkout...");
-      const response = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          form,
-          plan,
-          successUrl: `${siteUrl}/results?session_id={CHECKOUT_SESSION_ID}`,
-          cancelUrl: `${siteUrl}/?canceled=1`,
-          userId: user?.id || null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data?.url) {
-        throw new Error(data?.error || "Could not create checkout session.");
-      }
-
-      window.location.href = data.url;
-    } catch (error) {
-      console.error(error);
-      setLeadMessage(error.message || "Checkout failed.");
-      showToast(error.message || "Checkout failed.");
-    }
-  }
-
-  async function refreshDashboard() {
-    if (!supabase || !user) return;
-
-    setLoadingDashboard(true);
-    try {
-      const { data, error } = await supabase
-        .from("plans")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      setDashboardPlans(data || []);
-    } catch (error) {
-      console.error(error);
-      showToast("Could not load dashboard plans.");
-    } finally {
-      setLoadingDashboard(false);
-    }
-  }
-
-  function openPlan(dbItem) {
-    if (!dbItem?.form_data || !dbItem?.plan_data) return;
-    setForm(dbItem.form_data);
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        email: dbItem.email || user?.email || "",
-        form: dbItem.form_data,
-        plan: dbItem.plan_data,
-        isPaid: true,
-        savedAt: new Date().toISOString(),
-      })
-    );
-    setIsPaid(true);
-    setPath("/results");
-    window.history.pushState({}, "", "/results");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function goHome() {
-    setPath("/");
-    window.history.pushState({}, "", "/");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function openDashboard() {
-    setPath("/dashboard");
-    window.history.pushState({}, "", "/dashboard");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function verifySessionFromUrl(sessionId) {
-    if (!sessionId) return;
-
-    setCheckoutState("Verifying your payment...");
-    try {
-      const res = await fetch(
-        `/api/checkout-status?session_id=${encodeURIComponent(sessionId)}`
-      );
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Could not verify payment.");
-      }
-
-      if (data?.paid) {
-        setIsPaid(true);
-        persistCurrentPayload(true);
-        setCheckoutState(
-          "Payment confirmed. Your account dashboard and email should update shortly."
-        );
-        if (user) refreshDashboard();
-      } else {
-        setCheckoutState("Payment not confirmed yet. Give it a moment and refresh.");
-      }
-    } catch (error) {
-      console.error(error);
-      setCheckoutState(error.message || "Could not verify payment.");
-    }
-  }
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed?.form) setForm((prev) => ({ ...prev, ...parsed.form }));
-        if (parsed?.email) setAuthEmail(parsed.email);
-      } catch (error) {
-        console.error("Could not restore saved plan.", error);
-      }
-    }
-
-    setSavedPlans(getSavedPlans());
-
-    const handlePopState = () => {
-      setPath(window.location.pathname || "/");
+    const payload = {
+      email: form.email,
+      form,
+      plan,
+      savedAt: new Date().toISOString(),
     };
 
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function initAuth() {
-      if (!supabase) {
-        setAuthReady(false);
-        return;
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      setUser(session?.user ?? null);
-      setAuthReady(true);
-
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, sessionAfter) => {
-        setUser(sessionAfter?.user ?? null);
-      });
-
-      return () => subscription.unsubscribe();
-    }
-
-    const cleanupPromise = initAuth();
-
-    return () => {
-      mounted = false;
-      Promise.resolve(cleanupPromise).then((cleanup) => cleanup && cleanup());
-    };
-  }, []);
-
-  useEffect(() => {
-    if (path === "/dashboard" && user) {
-      refreshDashboard();
-    }
-  }, [path, user]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get("session_id");
-
-    if (path === "/results" && sessionId) {
-      verifySessionFromUrl(sessionId);
-    }
-  }, [path, user]);
-
-  const authNode = (
-    <AuthBar
-      authReady={authReady}
-      user={user}
-      authEmail={authEmail}
-      setAuthEmail={setAuthEmail}
-      sendMagicLink={sendMagicLink}
-      signOut={signOut}
-    />
-  );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.location.href = checkoutLinks.instant;
+  }
 
   return (
     <div style={styles.page}>
       <style>{globalCss}</style>
-
-      {toastMessage ? <div style={styles.toast}>{toastMessage}</div> : null}
-
       {path === "/results" ? (
-        <ResultsPage
-          plan={plan}
-          isPaid={isPaid}
-          saveUnlockedPlan={saveUnlockedPlan}
-          goHome={goHome}
-          openDashboard={openDashboard}
-          checkoutState={checkoutState}
-        />
-      ) : path === "/dashboard" ? (
-        <DashboardPage
-          user={user}
-          dashboardPlans={dashboardPlans}
-          refreshDashboard={refreshDashboard}
-          loadingDashboard={loadingDashboard}
-          openPlan={openPlan}
-          signOut={signOut}
-          goHome={goHome}
-        />
+        <ResultsPage plan={plan} isPaid={isPaid} />
       ) : (
-        <>
-          <LandingPage
-            form={form}
-            updateField={updateField}
-            plan={plan}
-            startCheckout={startCheckout}
-            savePreview={savePreview}
-            leadMessage={leadMessage}
-            authNode={authNode}
-          />
-
-          <SavedPlansPanel
-            savedPlans={savedPlans}
-            loadSavedPlan={loadSavedPlan}
-            deleteSavedPlan={deleteSavedPlan}
-            downloadSavedPlan={downloadSavedPlan}
-          />
-        </>
+        <LandingPage
+          form={form}
+          updateField={updateField}
+          plan={plan}
+          startCheckout={startCheckout}
+          savePreview={savePreview}
+          leadMessage={leadMessage}
+        />
       )}
     </div>
   );
@@ -1833,21 +1225,25 @@ const styles = {
     fontFamily:
       "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
+
   container: {
     maxWidth: 1200,
     margin: "0 auto",
     padding: "0 24px",
   },
+
   containerSection: {
     maxWidth: 1200,
     margin: "0 auto",
     padding: "28px 24px 64px",
   },
+
   containerSectionTight: {
     maxWidth: 1200,
     margin: "0 auto",
     padding: "8px 24px 56px",
   },
+
   heroWrap: {
     position: "relative",
     overflow: "hidden",
@@ -1855,6 +1251,7 @@ const styles = {
     background:
       "radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 28%), linear-gradient(to bottom, #ffffff, #f8fbff)",
   },
+
   gridBg: {
     position: "absolute",
     inset: 0,
@@ -1864,6 +1261,7 @@ const styles = {
     backgroundSize: "42px 42px",
     pointerEvents: "none",
   },
+
   header: {
     position: "relative",
     zIndex: 2,
@@ -1879,33 +1277,9 @@ const styles = {
     backdropFilter: "blur(12px)",
     boxShadow: "0 8px 30px rgba(0,0,0,0.04)",
   },
-  authBar: {
-    position: "relative",
-    zIndex: 2,
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 16,
-    marginTop: 16,
-    padding: 18,
-    borderRadius: 24,
-    border: "1px solid #e4e4e7",
-    background: "rgba(255,255,255,0.92)",
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  authBarTitle: { fontWeight: 800, fontSize: 16 },
-  authBarText: { marginTop: 6, color: "#52525b", fontSize: 14, lineHeight: 1.6 },
-  authActions: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
-  authInput: {
-    width: 260,
-    padding: "14px 16px",
-    borderRadius: 16,
-    border: "1px solid #d4d4d8",
-    background: "white",
-    fontSize: 15,
-    outline: "none",
-  },
+
   logoWrap: { display: "flex", alignItems: "center", gap: 12 },
+
   logo: {
     width: 44,
     height: 44,
@@ -1917,15 +1291,24 @@ const styles = {
     fontWeight: 800,
     fontSize: 14,
   },
+
   logoTitle: { fontSize: 14, fontWeight: 700 },
   logoSub: { fontSize: 12, color: "#71717a" },
-  nav: { display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" },
+
+  nav: {
+    display: "flex",
+    gap: 24,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
   navLink: {
     color: "#52525b",
     textDecoration: "none",
     fontSize: 14,
     fontWeight: 600,
   },
+
   headerCta: {
     background: "#09090b",
     color: "white",
@@ -1935,6 +1318,7 @@ const styles = {
     fontWeight: 700,
     fontSize: 14,
   },
+
   heroGrid: {
     position: "relative",
     zIndex: 2,
@@ -1944,7 +1328,11 @@ const styles = {
     alignItems: "center",
     padding: "48px 0 72px",
   },
-  heroLeft: { paddingTop: 8 },
+
+  heroLeft: {
+    paddingTop: 8,
+  },
+
   badge: {
     display: "inline-flex",
     padding: "8px 14px",
@@ -1955,6 +1343,7 @@ const styles = {
     fontWeight: 700,
     fontSize: 12,
   },
+
   heroTitle: {
     fontSize: 66,
     lineHeight: 1.01,
@@ -1962,6 +1351,7 @@ const styles = {
     margin: "20px 0 0",
     maxWidth: 640,
   },
+
   heroText: {
     marginTop: 18,
     maxWidth: 620,
@@ -1969,8 +1359,21 @@ const styles = {
     fontSize: 19,
     lineHeight: 1.65,
   },
-  heroButtons: { display: "flex", gap: 16, marginTop: 28, flexWrap: "wrap" },
-  heroTrustRow: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 20 },
+
+  heroButtons: {
+    display: "flex",
+    gap: 16,
+    marginTop: 28,
+    flexWrap: "wrap",
+  },
+
+  heroTrustRow: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 20,
+  },
+
   heroTrustPill: {
     padding: "10px 14px",
     borderRadius: 999,
@@ -1980,6 +1383,7 @@ const styles = {
     fontSize: 13,
     fontWeight: 700,
   },
+
   primaryBtn: {
     background: "#0ea5e9",
     color: "white",
@@ -1989,15 +1393,7 @@ const styles = {
     fontWeight: 800,
     display: "inline-block",
   },
-  primaryBtnButton: {
-    background: "#0ea5e9",
-    color: "white",
-    border: 0,
-    padding: "16px 22px",
-    borderRadius: 18,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
+
   secondaryBtn: {
     background: "white",
     color: "#09090b",
@@ -2008,6 +1404,7 @@ const styles = {
     border: "1px solid #d4d4d8",
     display: "inline-block",
   },
+
   secondaryBtnButton: {
     background: "white",
     color: "#09090b",
@@ -2017,6 +1414,7 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   primaryDarkButton: {
     display: "inline-block",
     marginTop: 12,
@@ -2028,6 +1426,7 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   primaryDarkButtonFull: {
     display: "block",
     width: "100%",
@@ -2041,13 +1440,16 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   previewShell: { position: "relative" },
+
   previewTopCard: {
     background: "linear-gradient(135deg, #0ea5e9, #22d3ee 45%, #111827)",
     color: "white",
     borderRadius: 30,
     padding: 24,
   },
+
   previewTopMeta: {
     textTransform: "uppercase",
     letterSpacing: ".2em",
@@ -2055,12 +1457,14 @@ const styles = {
     fontWeight: 800,
     color: "rgba(255,255,255,0.82)",
   },
+
   previewTitle: {
     fontSize: 30,
     fontWeight: 800,
     lineHeight: 1.1,
     marginTop: 12,
   },
+
   previewSummary: {
     marginTop: 10,
     color: "rgba(255,255,255,0.9)",
@@ -2068,6 +1472,7 @@ const styles = {
     fontSize: 15,
     minHeight: 52,
   },
+
   previewListWrap: {
     marginTop: 18,
     background: "white",
@@ -2076,18 +1481,21 @@ const styles = {
     padding: 18,
     boxShadow: "0 12px 30px rgba(0,0,0,0.04)",
   },
+
   previewMetricsGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0,1fr))",
     gap: 12,
     marginBottom: 14,
   },
+
   metricCard: {
     border: "1px solid #e4e4e7",
     background: "#fafafa",
     borderRadius: 20,
     padding: 14,
   },
+
   metricLabel: {
     fontSize: 12,
     fontWeight: 700,
@@ -2095,12 +1503,14 @@ const styles = {
     textTransform: "uppercase",
     letterSpacing: ".08em",
   },
+
   metricValue: {
     marginTop: 8,
     fontWeight: 800,
     fontSize: 18,
     lineHeight: 1.4,
   },
+
   previewItem: {
     display: "flex",
     gap: 16,
@@ -2110,6 +1520,7 @@ const styles = {
     padding: 16,
     marginBottom: 12,
   },
+
   timeBox: {
     minWidth: 92,
     background: "#09090b",
@@ -2120,9 +1531,26 @@ const styles = {
     fontSize: 12,
     fontWeight: 800,
   },
-  itemTitle: { fontWeight: 800, fontSize: 16 },
-  itemDesc: { marginTop: 6, color: "#52525b", lineHeight: 1.7, fontSize: 14 },
-  itemSubMeta: { marginTop: 10, color: "#0369a1", fontSize: 13, fontWeight: 700 },
+
+  itemTitle: {
+    fontWeight: 800,
+    fontSize: 16,
+  },
+
+  itemDesc: {
+    marginTop: 6,
+    color: "#52525b",
+    lineHeight: 1.7,
+    fontSize: 14,
+  },
+
+  itemSubMeta: {
+    marginTop: 10,
+    color: "#0369a1",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+
   lockedBlock: {
     border: "1px solid #bae6fd",
     background: "linear-gradient(135deg, #f0f9ff, #ffffff, #ecfeff)",
@@ -2130,6 +1558,7 @@ const styles = {
     padding: 18,
     marginTop: 6,
   },
+
   lockedBadge: {
     display: "inline-block",
     background: "#09090b",
@@ -2139,7 +1568,13 @@ const styles = {
     fontSize: 11,
     fontWeight: 800,
   },
-  lockedTitle: { fontWeight: 800, fontSize: 22, marginTop: 14 },
+
+  lockedTitle: {
+    fontWeight: 800,
+    fontSize: 22,
+    marginTop: 14,
+  },
+
   lockedText: {
     color: "#52525b",
     fontSize: 14,
@@ -2147,12 +1582,14 @@ const styles = {
     marginTop: 8,
     marginBottom: 14,
   },
+
   lockedFeatureGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0,1fr))",
     gap: 10,
     marginBottom: 12,
   },
+
   lockedFeature: {
     fontSize: 13,
     fontWeight: 700,
@@ -2162,19 +1599,26 @@ const styles = {
     borderRadius: 14,
     padding: "10px 12px",
   },
-  lightSection: { background: "#ffffff", padding: "56px 0 12px" },
+
+  lightSection: {
+    background: "#ffffff",
+    padding: "56px 0 12px",
+  },
+
   forYouSection: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 26,
     alignItems: "center",
   },
+
   forYouCard: {
     border: "1px solid #e4e4e7",
     borderRadius: 30,
     background: "linear-gradient(135deg, #ffffff, #fafafa)",
     padding: 26,
   },
+
   forYouRow: {
     display: "flex",
     gap: 12,
@@ -2185,31 +1629,44 @@ const styles = {
     color: "#27272a",
     lineHeight: 1.7,
   },
-  forYouCheck: { color: "#0284c7", fontWeight: 900 },
+
+  forYouCheck: {
+    color: "#0284c7",
+    fontWeight: 900,
+  },
+
   trustStrip: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0,1fr))",
     gap: 16,
   },
+
   trustStripItem: {
     border: "1px solid #e4e4e7",
     borderRadius: 24,
     padding: 20,
     background: "white",
   },
-  trustStripTitle: { fontWeight: 800, fontSize: 18 },
+
+  trustStripTitle: {
+    fontWeight: 800,
+    fontSize: 18,
+  },
+
   trustStripText: {
     marginTop: 8,
     color: "#52525b",
     lineHeight: 1.7,
     fontSize: 14,
   },
+
   twoCol: {
     display: "grid",
     gridTemplateColumns: "1fr 0.92fr",
     gap: 32,
     alignItems: "start",
   },
+
   eyebrow: {
     color: "#0284c7",
     fontWeight: 800,
@@ -2217,6 +1674,7 @@ const styles = {
     letterSpacing: ".24em",
     textTransform: "uppercase",
   },
+
   sectionTitle: {
     margin: "12px 0 0",
     fontWeight: 800,
@@ -2224,12 +1682,14 @@ const styles = {
     lineHeight: 1.08,
     letterSpacing: "-0.03em",
   },
+
   sectionText: {
     color: "#52525b",
     fontSize: 18,
     lineHeight: 1.8,
     marginTop: 16,
   },
+
   formCard: {
     marginTop: 24,
     border: "1px solid #e4e4e7",
@@ -2237,11 +1697,13 @@ const styles = {
     background: "linear-gradient(135deg, #ffffff, #fafafa)",
     padding: 24,
   },
+
   formGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0,1fr))",
     gap: 16,
   },
+
   label: {
     display: "block",
     fontSize: 14,
@@ -2249,6 +1711,7 @@ const styles = {
     marginBottom: 8,
     color: "#3f3f46",
   },
+
   input: {
     width: "100%",
     padding: "14px 16px",
@@ -2258,6 +1721,7 @@ const styles = {
     fontSize: 15,
     outline: "none",
   },
+
   checkboxRow: {
     display: "flex",
     gap: 10,
@@ -2270,15 +1734,33 @@ const styles = {
     fontSize: 14,
     color: "#3f3f46",
   },
-  buttonRow: { display: "flex", gap: 14, flexWrap: "wrap", marginTop: 18 },
-  helperText: { marginTop: 12, fontSize: 14, color: "#52525b" },
+
+  buttonRow: {
+    display: "flex",
+    gap: 14,
+    flexWrap: "wrap",
+    marginTop: 18,
+  },
+
+  helperText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#52525b",
+  },
+
   sideCard: {
     border: "1px solid #e4e4e7",
     borderRadius: 32,
     background: "white",
     padding: 24,
   },
-  sideCardTop: { fontSize: 22, fontWeight: 800, marginBottom: 14 },
+
+  sideCardTop: {
+    fontSize: 22,
+    fontWeight: 800,
+    marginBottom: 14,
+  },
+
   bulletRow: {
     display: "flex",
     gap: 12,
@@ -2289,7 +1771,12 @@ const styles = {
     lineHeight: 1.7,
     fontSize: 15,
   },
-  bulletDot: { color: "#0284c7", fontWeight: 900 },
+
+  bulletDot: {
+    color: "#0284c7",
+    fontWeight: 900,
+  },
+
   quoteCard: {
     marginTop: 16,
     border: "1px solid #e4e4e7",
@@ -2297,20 +1784,34 @@ const styles = {
     background: "#fafafa",
     padding: 22,
   },
+
   quoteText: {
     fontSize: 18,
     lineHeight: 1.7,
     fontWeight: 700,
     color: "#18181b",
   },
-  quoteSub: { marginTop: 10, color: "#52525b", fontSize: 14, lineHeight: 1.7 },
-  pricingSection: { background: "#09090b", color: "white", padding: "72px 0" },
+
+  quoteSub: {
+    marginTop: 10,
+    color: "#52525b",
+    fontSize: 14,
+    lineHeight: 1.7,
+  },
+
+  pricingSection: {
+    background: "#09090b",
+    color: "white",
+    padding: "72px 0",
+  },
+
   pricingGridSingle: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 560px)",
     justifyContent: "center",
     marginTop: 34,
   },
+
   priceCardHero: {
     border: "2px solid #38bdf8",
     borderRadius: 36,
@@ -2318,6 +1819,7 @@ const styles = {
     background: "white",
     color: "#09090b",
   },
+
   priceBadgeFeatured: {
     display: "inline-block",
     borderRadius: 999,
@@ -2327,11 +1829,37 @@ const styles = {
     background: "#e0f2fe",
     color: "#0369a1",
   },
-  priceName: { marginTop: 18, fontSize: 28, fontWeight: 800 },
-  priceValue: { marginTop: 12, fontSize: 56, fontWeight: 900 },
-  priceDescFeatured: { marginTop: 14, color: "#52525b", lineHeight: 1.7 },
-  priceFeatures: { marginTop: 18, display: "grid", gap: 10 },
-  priceFeatureDark: { fontSize: 15, lineHeight: 1.7, color: "#27272a" },
+
+  priceName: {
+    marginTop: 18,
+    fontSize: 28,
+    fontWeight: 800,
+  },
+
+  priceValue: {
+    marginTop: 12,
+    fontSize: 56,
+    fontWeight: 900,
+  },
+
+  priceDescFeatured: {
+    marginTop: 14,
+    color: "#52525b",
+    lineHeight: 1.7,
+  },
+
+  priceFeatures: {
+    marginTop: 18,
+    display: "grid",
+    gap: 10,
+  },
+
+  priceFeatureDark: {
+    fontSize: 15,
+    lineHeight: 1.7,
+    color: "#27272a",
+  },
+
   miniTrustText: {
     marginTop: 14,
     textAlign: "center",
@@ -2339,11 +1867,13 @@ const styles = {
     fontSize: 13,
     fontWeight: 700,
   },
+
   resultsHero: {
     padding: "48px 0 72px",
     background: "linear-gradient(to bottom, #f8fbff, #ffffff)",
     minHeight: "100vh",
   },
+
   resultsCard: {
     background: "white",
     border: "1px solid #e4e4e7",
@@ -2351,6 +1881,7 @@ const styles = {
     padding: 28,
     boxShadow: "0 12px 30px rgba(0,0,0,0.04)",
   },
+
   successBadge: {
     display: "inline-block",
     background: "#166534",
@@ -2360,43 +1891,42 @@ const styles = {
     fontSize: 11,
     fontWeight: 800,
   },
+
   resultsTitle: {
     fontSize: 44,
     lineHeight: 1.05,
     letterSpacing: "-0.03em",
     margin: "18px 0 0",
   },
+
   resultsText: {
     color: "#52525b",
     fontSize: 18,
     lineHeight: 1.7,
     marginTop: 14,
   },
-  resultsTopActions: {
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
-    marginTop: 22,
-    marginBottom: 6,
-  },
+
   resultsSummaryGridFour: {
     display: "grid",
     gridTemplateColumns: "repeat(4, minmax(0,1fr))",
     gap: 16,
     marginTop: 28,
   },
+
   resultsSummaryGridTwo: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0,1fr))",
     gap: 16,
     marginTop: 18,
   },
+
   summaryBox: {
     border: "1px solid #e4e4e7",
     borderRadius: 24,
     padding: 18,
     background: "#fafafa",
   },
+
   summaryLabel: {
     fontSize: 12,
     textTransform: "uppercase",
@@ -2404,13 +1934,21 @@ const styles = {
     color: "#71717a",
     fontWeight: 700,
   },
-  summaryValue: { marginTop: 10, fontWeight: 800, fontSize: 18, lineHeight: 1.5 },
+
+  summaryValue: {
+    marginTop: 10,
+    fontWeight: 800,
+    fontSize: 18,
+    lineHeight: 1.5,
+  },
+
   bigInfoCard: {
     border: "1px solid #e4e4e7",
     borderRadius: 24,
     padding: 20,
     background: "#ffffff",
   },
+
   bigInfoTitle: {
     fontSize: 14,
     fontWeight: 800,
@@ -2418,8 +1956,21 @@ const styles = {
     textTransform: "uppercase",
     letterSpacing: ".08em",
   },
-  bigInfoValue: { marginTop: 10, fontSize: 28, fontWeight: 900, lineHeight: 1.2 },
-  bigInfoText: { marginTop: 10, color: "#52525b", lineHeight: 1.7, fontSize: 15 },
+
+  bigInfoValue: {
+    marginTop: 10,
+    fontSize: 28,
+    fontWeight: 900,
+    lineHeight: 1.2,
+  },
+
+  bigInfoText: {
+    marginTop: 10,
+    color: "#52525b",
+    lineHeight: 1.7,
+    fontSize: 15,
+  },
+
   whyBox: {
     marginTop: 22,
     border: "1px solid #bae6fd",
@@ -2427,11 +1978,33 @@ const styles = {
     borderRadius: 24,
     padding: 18,
   },
-  whyTitle: { fontWeight: 800, fontSize: 18 },
-  whyText: { marginTop: 8, color: "#52525b", lineHeight: 1.7 },
-  sectionBlock: { marginTop: 24 },
-  resultsBlockTitle: { fontWeight: 800, fontSize: 24, marginBottom: 14 },
-  fullPlanWrap: { display: "grid", gap: 14 },
+
+  whyTitle: {
+    fontWeight: 800,
+    fontSize: 18,
+  },
+
+  whyText: {
+    marginTop: 8,
+    color: "#52525b",
+    lineHeight: 1.7,
+  },
+
+  sectionBlock: {
+    marginTop: 24,
+  },
+
+  resultsBlockTitle: {
+    fontWeight: 800,
+    fontSize: 24,
+    marginBottom: 14,
+  },
+
+  fullPlanWrap: {
+    display: "grid",
+    gap: 14,
+  },
+
   fullPlanItem: {
     display: "flex",
     gap: 16,
@@ -2440,7 +2013,14 @@ const styles = {
     borderRadius: 24,
     padding: 18,
   },
-  resultMetaLine: { marginTop: 8, color: "#0369a1", fontSize: 13, fontWeight: 700 },
+
+  resultMetaLine: {
+    marginTop: 8,
+    color: "#0369a1",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+
   examplesList: {
     marginTop: 10,
     marginBottom: 0,
@@ -2448,12 +2028,14 @@ const styles = {
     color: "#27272a",
     lineHeight: 1.8,
   },
+
   sectionMiniCard: {
     border: "1px solid #e4e4e7",
     borderRadius: 24,
     padding: 20,
     background: "#ffffff",
   },
+
   smallResultBlock: {
     padding: "10px 0",
     borderBottom: "1px solid #f4f4f5",
@@ -2461,6 +2043,7 @@ const styles = {
     lineHeight: 1.7,
     fontSize: 15,
   },
+
   noteBox: {
     marginTop: 22,
     borderTop: "1px solid #e4e4e7",
@@ -2469,104 +2052,25 @@ const styles = {
     fontSize: 14,
     lineHeight: 1.7,
   },
-  savedPlansCard: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 32,
-    background: "linear-gradient(135deg, #ffffff, #fafafa)",
-    padding: 24,
-  },
-  savedPlansTopRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 16,
-    marginBottom: 18,
-  },
-  savedPlansEyebrow: {
-    color: "#0284c7",
-    fontWeight: 800,
-    fontSize: 12,
-    letterSpacing: ".18em",
-    textTransform: "uppercase",
-  },
-  savedPlansTitle: {
-    marginTop: 10,
-    fontWeight: 800,
-    fontSize: 34,
-    lineHeight: 1.08,
-    letterSpacing: "-0.03em",
-  },
-  savedPlansText: {
-    marginTop: 12,
-    color: "#52525b",
-    fontSize: 16,
-    lineHeight: 1.7,
-    maxWidth: 760,
-  },
-  savedEmptyState: {
-    border: "1px dashed #d4d4d8",
-    borderRadius: 24,
-    padding: 20,
-    color: "#71717a",
-    background: "#ffffff",
-  },
-  savedPlansList: { display: "grid", gap: 14 },
-  savedPlanRow: {
-    display: "flex",
-    gap: 16,
-    justifyContent: "space-between",
-    alignItems: "center",
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 18,
-    background: "#ffffff",
-  },
-  savedPlanName: { fontSize: 18, fontWeight: 800, color: "#09090b" },
-  savedPlanMeta: { marginTop: 6, color: "#71717a", fontSize: 14, lineHeight: 1.6 },
-  savedPlanActions: {
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-  },
-  savedActionPrimary: {
-    background: "#09090b",
-    color: "white",
-    border: 0,
-    padding: "12px 16px",
-    borderRadius: 16,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  savedActionSecondary: {
-    background: "white",
-    color: "#09090b",
-    border: "1px solid #d4d4d8",
-    padding: "12px 16px",
-    borderRadius: 16,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  toast: {
-    position: "fixed",
-    right: 18,
-    bottom: 18,
-    zIndex: 50,
-    background: "#09090b",
-    color: "white",
-    padding: "12px 16px",
-    borderRadius: 16,
-    fontWeight: 700,
-    boxShadow: "0 14px 30px rgba(0,0,0,0.18)",
-  },
 };
 
 const globalCss = `
   html { scroll-behavior: smooth; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #ffffff; overflow-x: hidden; }
-  a, button { transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease; }
-  a:hover, button:hover { transform: translateY(-1px); }
+  body {
+    margin: 0;
+    background: #ffffff;
+    overflow-x: hidden;
+  }
+
+  a, button {
+    transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease;
+  }
+
+  a:hover, button:hover {
+    transform: translateY(-1px);
+  }
+
   input:focus, select:focus {
     border-color: #38bdf8 !important;
     box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
@@ -2587,7 +2091,11 @@ const globalCss = `
   }
 
   @media (max-width: 640px) {
-    html, body { overflow-x: hidden !important; width: 100%; }
+    html, body {
+      overflow-x: hidden !important;
+      width: 100%;
+    }
+
     h1 { font-size: 38px !important; }
     h2 { font-size: 30px !important; }
 
@@ -2596,25 +2104,209 @@ const globalCss = `
       padding-right: 16px !important;
     }
 
-    div[style*="display: flex"][style*="justify-content: space-between"] {
+    div[style*="padding: 48px 0 72px"] {
+      padding: 28px 0 40px !important;
+      gap: 24px !important;
+    }
+
+    div[style*="padding: 16px"][style*="margin-top: 24px"][style*="border-radius: 28px"] {
+      padding: 18px !important;
+    }
+
+    div[style*="display: flex"][style*="justify-content: space-between"][style*="backdrop-filter: blur(12px)"] {
       flex-direction: column !important;
       align-items: stretch !important;
+      gap: 18px !important;
     }
 
-    div[style*="display: grid"][style*="gap: 16px"],
-    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"],
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"] {
-      grid-template-columns: 1fr !important;
+    div[style*="display: flex"][style*="gap: 24px"][style*="align-items: center"][style*="flex-wrap: wrap"] {
+      justify-content: center !important;
+      gap: 16px !important;
     }
 
-    button, a[style*="display: inline-block"], a[style*="display: block"] {
+    a[style*="padding: 12px 16px"][style*="border-radius: 16px"] {
       width: 100% !important;
       text-align: center !important;
     }
 
-    input, select {
-      min-height: 56px !important;
+    div[style*="gap: 24px"][style*="flex-wrap: wrap"] {
+      gap: 12px !important;
+      justify-content: flex-start !important;
+    }
+
+    div[style*="margin-top: 28px"][style*="flex-wrap: wrap"] {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 12px !important;
+    }
+
+    div[style*="margin-top: 28px"][style*="flex-wrap: wrap"] > a {
+      width: 100% !important;
+      text-align: center !important;
+    }
+
+    div[style*="margin-top: 20px"][style*="flex-wrap: wrap"] {
+      gap: 8px !important;
+    }
+
+    div[style*="border-radius: 30px"][style*="padding: 24px"][style*="linear-gradient(135deg, #0ea5e9, #22d3ee 45%, #111827)"] {
+      padding: 18px !important;
+      border-radius: 24px !important;
+    }
+
+    div[style*="font-size: 30px"][style*="font-weight: 800"][style*="line-height: 1.1"] {
+      font-size: 24px !important;
+      line-height: 1.08 !important;
+    }
+
+    div[style*="min-height: 52px"] {
+      min-height: unset !important;
+      font-size: 14px !important;
+      line-height: 1.6 !important;
+    }
+
+    div[style*="margin-top: 18px"][style*="border-radius: 30px"][style*="padding: 18px"] {
+      padding: 14px !important;
+      border-radius: 24px !important;
+    }
+
+    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
+      grid-template-columns: 1fr !important;
+    }
+
+    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] {
+      grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    }
+
+    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] > div:last-child {
+      grid-column: 1 / -1 !important;
+    }
+
+    div[style*="background: #fafafa"][style*="border-radius: 20px"][style*="padding: 14px"] {
+      padding: 16px !important;
+      min-height: 120px !important;
+    }
+
+    div[style*="margin-top: 8px"][style*="font-weight: 800"][style*="font-size: 18px"] {
+      font-size: 17px !important;
+      line-height: 1.25 !important;
+      word-break: normal !important;
+      overflow-wrap: anywhere !important;
+    }
+
+    div[style*="display: flex"][style*="border-radius: 24px"][style*="margin-bottom: 12px"] {
+      flex-direction: column !important;
+      gap: 12px !important;
+    }
+
+    div[style*="min-width: 92px"][style*="background: #09090b"] {
+      min-width: 0 !important;
+      width: fit-content !important;
+      padding: 10px 14px !important;
+    }
+
+    div[style*="font-size: 18px"][style*="line-height: 1.4"][style*="font-weight: 800"] {
       font-size: 16px !important;
+      line-height: 1.35 !important;
+      word-break: break-word !important;
+    }
+
+    div[style*="padding: 18px"][style*="margin-top: 6px"][style*="border-radius: 28px"] {
+      padding: 16px !important;
+      border-radius: 22px !important;
+    }
+
+    button[style*="margin-top: 12px"][style*="border-radius: 18px"],
+    button[style*="width: 100%"][style*="border-radius: 18px"],
+    button[style*="cursor: pointer"][style*="border-radius: 18px"],
+    a[style*="padding: 16px 22px"][style*="border-radius: 18px"] {
+      width: 100% !important;
+      text-align: center !important;
+    }
+
+    div[style*="display: grid"][style*="gap: 26px"][style*="align-items: center"] {
+      grid-template-columns: 1fr !important;
+      gap: 18px !important;
+    }
+
+    div[style*="padding: 26px"][style*="border-radius: 30px"][style*="linear-gradient(135deg, #ffffff, #fafafa)"] {
+      padding: 18px !important;
+      border-radius: 24px !important;
+    }
+
+    div[style*="padding: 14px 0"][style*="font-size: 16px"][style*="line-height: 1.7"] {
+      font-size: 15px !important;
+      line-height: 1.6 !important;
+    }
+
+    div[style*="display: grid"][style*="gap: 16px"] {
+      grid-template-columns: 1fr !important;
+    }
+
+    div[style*="border-radius: 24px"][style*="padding: 20px"][style*="background: white"] {
+      padding: 18px !important;
+    }
+
+    div[style*="font-size: 18px"][style*="font-weight: 800"] {
+      font-size: 16px !important;
+      line-height: 1.25 !important;
+      word-break: break-word !important;
+    }
+
+    div[style*="margin: 12px 0 0"][style*="font-size: 46px"] {
+      font-size: 30px !important;
+      line-height: 1.08 !important;
+    }
+
+    div[style*="padding: 24px"][style*="border-radius: 32px"] {
+      padding: 18px !important;
+      border-radius: 24px !important;
+    }
+
+    label[style*="display: block"][style*="font-size: 14px"] {
+      margin-bottom: 8px !important;
+    }
+
+    input, select {
+      height: 56px !important;
+      min-height: 56px !important;
+      padding: 0 14px !important;
+      font-size: 16px !important;
+    }
+
+    input[type="time"] {
+      height: 56px !important;
+      min-height: 56px !important;
+      padding: 0 14px !important;
+      line-height: 56px !important;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    label[style*="padding: 16px"][style*="border-radius: 18px"] {
+      align-items: flex-start !important;
+    }
+
+    div[style*="gap: 14px"][style*="flex-wrap: wrap"][style*="margin-top: 18px"] {
+      flex-direction: column !important;
+      align-items: stretch !important;
+    }
+
+    div[style*="gap: 14px"][style*="flex-wrap: wrap"][style*="margin-top: 18px"] > button {
+      width: 100% !important;
+    }
+
+    section[style*="padding: 72px 0"] {
+      padding: 48px 0 !important;
+    }
+
+    div[style*="padding: 34px"][style*="border-radius: 36px"] {
+      padding: 22px !important;
+      border-radius: 24px !important;
+    }
+
+    div[style*="font-size: 56px"][style*="font-weight: 900"] {
+      font-size: 42px !important;
     }
   }
 `;
