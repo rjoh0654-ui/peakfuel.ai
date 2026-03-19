@@ -4,7 +4,7 @@ const checkoutLinks = {
   instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
 };
 
-const STORAGE_KEY = "peakfuel_checkout_plan";
+const STORAGE_KEY = "peakfuel_checkout_plan_v2";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -13,13 +13,16 @@ const sports = [
   ["basketball", "Basketball"],
   ["football", "Football"],
   ["lifting", "Lifting"],
+  ["baseball", "Baseball"],
+  ["volleyball", "Volleyball"],
+  ["tennis", "Tennis"],
   ["other", "Other"],
 ];
 
 const goals = [
   ["perform", "Perform Better"],
   ["gain", "Build Muscle"],
-  ["maintain", "Maintain"],
+  ["maintain", "Maintain Performance"],
   ["lean", "Lean Out"],
 ];
 
@@ -33,7 +36,7 @@ const ageRanges = [
 const intensityLevels = [
   ["moderate", "Moderate"],
   ["hard", "Hard"],
-  ["very-hard", "Very hard"],
+  ["very-hard", "Very Hard"],
 ];
 
 const stomachOptions = [
@@ -41,20 +44,63 @@ const stomachOptions = [
   ["sensitive", "Sensitive before training"],
 ];
 
+const bodyGoalOptions = [
+  ["maintain", "Maintain weight"],
+  ["gain", "Gain size / muscle"],
+  ["lean", "Get leaner"],
+];
+
+const trainingTypeOptions = [
+  ["mixed", "Mixed training"],
+  ["endurance", "Mostly endurance"],
+  ["power", "Mostly strength / power"],
+];
+
+const hydrationOptions = [
+  ["low", "Usually underdrink"],
+  ["okay", "Pretty average"],
+  ["strong", "Already hydrate well"],
+];
+
+const caffeineOptions = [
+  ["none", "None"],
+  ["sometimes", "Sometimes"],
+  ["daily", "Daily"],
+];
+
+const competitionOptions = [
+  ["rare", "Rarely"],
+  ["sometimes", "Sometimes"],
+  ["often", "Often / in season"],
+];
+
+const eatingPatternOptions = [
+  ["random", "Mostly random"],
+  ["somewhat", "Somewhat structured"],
+  ["structured", "Already structured"],
+];
+
+const sorenessOptions = [
+  ["low", "Low"],
+  ["medium", "Medium"],
+  ["high", "High"],
+];
+
 const planTiers = [
   {
     key: "instant",
-    name: "Instant Athlete Fuel Plan",
+    name: "PeakFuel Full System",
     price: "$4.99",
     badge: "Instant access",
     description:
-      "A more specific fueling plan built around your training schedule, goal, and daily routine.",
+      "A personalized athlete fueling system built around your sport, schedule, training load, hydration, and recovery needs.",
     features: [
-      "Specific meal timing",
-      "Food examples for each fuel block",
-      "Protein target",
-      "Hydration target",
-      "Recovery guidance",
+      "Exact macro targets",
+      "Hydration target in ounces",
+      "Pre, during, and post-workout strategy",
+      "Meet / game day fueling version",
+      "Recovery guidance and timing",
+      "Built from your actual schedule",
     ],
   },
 ];
@@ -75,62 +121,166 @@ function formatTime(totalMinutes) {
   return `${hours}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
-function getProteinTarget(weight, goal) {
-  const pounds = Number(weight) || 150;
-  if (goal === "gain") return `${Math.round(pounds * 0.9)}–${Math.round(pounds * 1.0)}g/day`;
-  if (goal === "lean") return `${Math.round(pounds * 0.85)}–${Math.round(pounds * 0.95)}g/day`;
-  return `${Math.round(pounds * 0.8)}–${Math.round(pounds * 0.9)}g/day`;
+function niceSportLabel(sport) {
+  const found = sports.find(([value]) => value === sport);
+  return found ? found[1] : "Athlete";
 }
 
-function getHydrationTarget(weight, intensity, doubleDay) {
-  const pounds = Number(weight) || 150;
-  let ounces = Math.round(pounds * 0.6);
-  if (intensity === "hard") ounces += 10;
-  if (intensity === "very-hard") ounces += 20;
-  if (doubleDay) ounces += 20;
-  return `${ounces}–${ounces + 16} oz/day`;
+function goalLabel(goal) {
+  const found = goals.find(([value]) => value === goal);
+  return found ? found[1] : "Perform Better";
 }
 
-function getCarbFocus(goal, sport, intensity) {
-  if (goal === "lean") return "Keep most carbs around training and recovery.";
-  if (goal === "gain") return "Push carbs hard around training and in recovery meals.";
-  if (sport === "swimming" || intensity === "very-hard") {
-    return "Prioritize steady carbs through the day and extra carbs before training.";
+function clamp(num, min, max) {
+  return Math.max(min, Math.min(max, num));
+}
+
+function getCalories(form) {
+  const weight = Number(form.weight) || 150;
+  const duration = Number(form.duration) || 90;
+
+  let base = weight * 15;
+
+  if (form.trainingType === "endurance") base += 150;
+  if (form.trainingType === "power") base += 75;
+  if (form.intensity === "hard") base += 150;
+  if (form.intensity === "very-hard") base += 300;
+  if (duration >= 90) base += 100;
+  if (duration >= 120) base += 150;
+  if (form.doubleDay) base += 300;
+  if (form.goal === "gain") base += 250;
+  if (form.goal === "lean") base -= 200;
+
+  return Math.round(base);
+}
+
+function getProteinGrams(form) {
+  const weight = Number(form.weight) || 150;
+  if (form.goal === "gain") return Math.round(weight * 0.95);
+  if (form.goal === "lean") return Math.round(weight * 0.9);
+  return Math.round(weight * 0.85);
+}
+
+function getCarbGrams(form, calories, protein) {
+  const weight = Number(form.weight) || 150;
+  let carbs = Math.round(weight * 2.0);
+
+  if (form.trainingType === "endurance") carbs += 40;
+  if (form.intensity === "hard") carbs += 25;
+  if (form.intensity === "very-hard") carbs += 50;
+  if (form.doubleDay) carbs += 40;
+  if (form.goal === "gain") carbs += 30;
+  if (form.goal === "lean") carbs -= 25;
+
+  const safeMinimum = Math.round(weight * 1.4);
+  const roughMax = Math.round((calories - protein * 4 - 55 * 9) / 4);
+
+  return clamp(carbs, safeMinimum, Math.max(roughMax, safeMinimum + 20));
+}
+
+function getFatGrams(calories, protein, carbs) {
+  const remaining = calories - protein * 4 - carbs * 4;
+  return Math.max(45, Math.round(remaining / 9));
+}
+
+function getHydrationOunces(form) {
+  const weight = Number(form.weight) || 150;
+  let ounces = Math.round(weight * 0.6);
+
+  if (form.intensity === "hard") ounces += 12;
+  if (form.intensity === "very-hard") ounces += 20;
+  if (form.doubleDay) ounces += 20;
+  if (Number(form.duration) >= 90) ounces += 8;
+  if (Number(form.duration) >= 120) ounces += 8;
+  if (form.currentHydration === "low") ounces += 8;
+
+  return ounces;
+}
+
+function getDuringTrainingHydration(form) {
+  if (form.intensity === "very-hard" || Number(form.duration) >= 90 || form.doubleDay) {
+    return "16–28 oz per hour + electrolytes";
   }
-  return "Use carbs consistently before and after training.";
+  if (form.intensity === "hard") {
+    return "14–22 oz per hour";
+  }
+  return "12–18 oz per hour";
+}
+
+function getMacroSummary(form, calories, protein, carbs, fat) {
+  return {
+    calories: `${calories} kcal`,
+    protein: `${protein}g`,
+    carbs: `${carbs}g`,
+    fat: `${fat}g`,
+  };
+}
+
+function getCarbFocus(form) {
+  if (form.goal === "lean") {
+    return "Keep most carbs around training, recovery, and higher-output parts of the day.";
+  }
+  if (form.goal === "gain") {
+    return "Push carbs hard before training, after training, and again at dinner for recovery and growth.";
+  }
+  if (form.trainingType === "endurance" || form.sport === "swimming" || form.intensity === "very-hard") {
+    return "Distribute carbs steadily through the day so energy stays high before and during training.";
+  }
+  return "Center carbs around training and recovery while keeping earlier meals balanced.";
 }
 
 function preWorkoutFoods(stomachSensitivity) {
   if (stomachSensitivity === "sensitive") {
-    return ["banana", "applesauce pouch", "toast + honey", "light electrolytes"];
+    return ["banana", "applesauce pouch", "toast + honey", "sports drink", "rice cakes"];
   }
-  return ["banana + granola bar", "bagel + honey", "rice cakes + jam", "pretzels + fruit"];
+  return ["bagel + honey", "banana + granola bar", "pretzels + fruit", "rice cakes + jam", "toast + peanut butter"];
 }
 
 function postWorkoutFoods(goal) {
   if (goal === "gain") {
-    return ["protein shake + bagel", "chocolate milk + rice bowl", "turkey sandwich + fruit"];
+    return [
+      "protein shake + bagel",
+      "chocolate milk + rice bowl",
+      "turkey sandwich + fruit",
+      "Greek yogurt + granola + banana",
+    ];
   }
   if (goal === "lean") {
-    return ["protein shake + banana", "Greek yogurt + berries + granola", "chicken + rice"];
+    return [
+      "protein shake + banana",
+      "Greek yogurt + berries + granola",
+      "chicken + rice",
+      "eggs + toast + fruit",
+    ];
   }
-  return ["chocolate milk + bagel", "protein shake + fruit", "rice bowl + chicken"];
+  return [
+    "chocolate milk + bagel",
+    "protein shake + fruit",
+    "rice bowl + chicken",
+    "sandwich + fruit + water",
+  ];
 }
 
 function breakfastFoods(goal) {
-  if (goal === "gain") return "eggs, toast, fruit, yogurt, and an extra carb like oatmeal";
+  if (goal === "gain") return "eggs, toast, fruit, yogurt, and an added carb like oatmeal";
   if (goal === "lean") return "eggs, fruit, toast, and Greek yogurt";
   return "eggs, toast, fruit, and yogurt or oatmeal";
 }
 
 function lunchFoods(goal) {
-  if (goal === "gain") {
-    return "rice or pasta, chicken or beef, fruit, and a side like bread or potatoes";
-  }
-  if (goal === "lean") {
-    return "rice or potatoes, lean protein, fruit, and vegetables";
-  }
-  return "rice, potatoes, or pasta with lean protein and fruit";
+  if (goal === "gain") return "rice or pasta, protein, fruit, and an added carb like bread or potatoes";
+  if (goal === "lean") return "rice or potatoes, lean protein, fruit, and vegetables";
+  return "rice, potatoes, or pasta with protein and fruit";
+}
+
+function getThisIsForYouItems(form) {
+  const sport = niceSportLabel(form.sport);
+  return [
+    `You train hard in ${sport} but still guess what to eat before practice.`,
+    "You feel low-energy, flat, or underfueled during training.",
+    "You want better performance instead of just “eating healthy.”",
+    "You need a schedule that fits school, lifting, practice, and recovery.",
+  ];
 }
 
 function buildPlan(form) {
@@ -139,90 +289,155 @@ function buildPlan(form) {
   const practice = toMinutes(form.practiceTime) ?? 945;
   const bed = toMinutes(form.bedTime) ?? 1350;
 
-  const proteinTarget = getProteinTarget(form.weight, form.goal);
-  const hydrationTarget = getHydrationTarget(form.weight, form.intensity, form.doubleDay);
-  const carbFocus = getCarbFocus(form.goal, form.sport, form.intensity);
+  const calories = getCalories(form);
+  const protein = getProteinGrams(form);
+  const carbs = getCarbGrams(form, calories, protein);
+  const fat = getFatGrams(calories, protein, carbs);
+  const hydrationOz = getHydrationOunces(form);
+  const duringTraining = getDuringTrainingHydration(form);
+  const carbFocus = getCarbFocus(form);
 
   const preFoods = preWorkoutFoods(form.stomachSensitivity);
   const recoveryFoods = postWorkoutFoods(form.goal);
 
-  const profileSummary = `${form.sport === "swimming" ? "Swimmer" : "Athlete"} with a ${form.goal} goal, ${form.intensity} training, and ${form.doubleDay ? "a heavy or double-day load" : "a standard training day"}.`;
+  const athleteType = niceSportLabel(form.sport);
+  const title =
+    form.sport === "swimming"
+      ? "Your PeakFuel Swim System"
+      : `Your PeakFuel ${athleteType} System`;
+
+  const previewTitle = "Your Personalized Fuel System";
+  const previewSummary = `Built for a ${form.weight || "150"} lb ${athleteType.toLowerCase()} with ${goalLabel(form.goal).toLowerCase()} as the goal, ${form.intensity.replace("-", " ")} training, and practice at ${formatTime(practice)}.`;
 
   const whyThisWorks =
     form.goal === "gain"
-      ? "This plan increases total fuel and recovery support so you can train hard and still build."
+      ? "This system increases total fuel, recovery carbs, and protein timing so you can train hard without falling behind on growth and recovery."
       : form.goal === "lean"
-        ? "This plan keeps protein high and places most carbs where they help performance the most."
-        : "This plan keeps your energy more stable through school and practice so you do not crash before training.";
+        ? "This system keeps protein high, places carbs where they help performance most, and avoids the classic mistake of underfueling before training."
+        : "This system spreads your fuel more intentionally across the day so you can show up to training with better energy, recover faster, and avoid late-day crashes.";
 
   const meal1Time = formatTime(wake + 30);
   const meal2Time = formatTime(Math.max(school - 30, wake + 150));
   const meal3Time = formatTime(practice - 180);
   const meal4Time = formatTime(practice - 60);
-  const meal5Time = formatTime(practice + 30);
+  const meal5Time = formatTime(practice + 20);
   const meal6Time = formatTime(Math.min(bed - 90, practice + 150));
 
   const items = [
     {
       time: meal1Time,
-      title: "Breakfast",
-      desc: `Start with ${breakfastFoods(form.goal)}. Aim for protein + carbs + fluids early.`,
-      examples: ["2–3 eggs", "2 slices toast", "fruit", "water"],
+      title: "Breakfast — Fuel Foundation",
+      desc: `Start the day with ${breakfastFoods(form.goal)} so you do not spend the first half of the day trying to catch up.`,
+      macros: `Target: ~${Math.round(carbs * 0.2)}g carbs + ${Math.round(protein * 0.22)}g protein`,
+      hydration: "Hydration: 16–20 oz water in the morning",
+      examples: ["eggs", "toast", "fruit", "yogurt or oatmeal"],
     },
     {
       time: meal2Time,
-      title: "School snack",
-      desc: "Keep energy stable so you do not go into practice underfueled.",
+      title: "Mid-Morning / School Fuel",
+      desc: "This keeps your energy stable so you do not enter lunch or practice already underfueled.",
+      macros: `Target: ~${Math.round(carbs * 0.1)}g carbs + ${Math.round(protein * 0.1)}g protein`,
+      hydration: "Hydration: 10–16 oz",
       examples:
         form.stomachSensitivity === "sensitive"
-          ? ["banana", "applesauce pouch", "water"]
-          : ["granola bar", "fruit", "pretzels"],
+          ? ["banana", "applesauce pouch", "crackers", "water"]
+          : ["granola bar", "fruit", "pretzels", "Greek yogurt"],
     },
     {
       time: meal3Time,
-      title: "Main pre-practice meal",
-      desc: `Build this around ${lunchFoods(form.goal)}.`,
-      examples: ["rice or pasta", "chicken / turkey / beef", "fruit", "water"],
+      title: "Main Pre-Training Meal",
+      desc: `Build this around ${lunchFoods(form.goal)} so you go into training with real fuel instead of relying on one snack.`,
+      macros: `Target: ~${Math.round(carbs * 0.26)}g carbs + ${Math.round(protein * 0.22)}g protein`,
+      hydration: "Hydration: 16–24 oz before training window",
+      examples: ["rice / pasta / potatoes", "chicken / turkey / beef", "fruit", "water"],
     },
     {
       time: meal4Time,
-      title: "Pre-training top-up",
-      desc: "Use a lighter carb-focused snack 45–75 minutes before training.",
+      title: "Pre-Workout Top-Up",
+      desc: "Use a lighter carb-focused snack 45–75 minutes before training to sharpen energy without feeling heavy.",
+      macros: `Target: ~${Math.round(carbs * 0.12)}g carbs`,
+      hydration: "Hydration: 8–12 oz",
       examples: preFoods,
     },
     {
+      time: formatTime(practice),
+      title: "During Training Strategy",
+      desc: "Do not wait until you feel flat. Your hydration and electrolytes should already be working for you.",
+      macros: form.doubleDay || form.intensity === "very-hard" ? "Add carbs if needed during long or high-output sessions" : "Hydration-first approach",
+      hydration: `During training: ${duringTraining}`,
+      examples:
+        form.intensity === "very-hard" || form.doubleDay
+          ? ["water bottle", "electrolytes", "sports drink if needed"]
+          : ["water bottle", "electrolytes if you sweat heavily"],
+    },
+    {
       time: meal5Time,
-      title: "Recovery",
-      desc: "Refuel quickly after training so tomorrow does not start behind.",
+      title: "Post-Workout Recovery Window",
+      desc: "This is where you replace what you used, start muscle repair, and avoid going into tomorrow depleted.",
+      macros: `Target: ~${Math.round(carbs * 0.18)}g carbs + ${Math.round(protein * 0.22)}g protein`,
+      hydration: "Hydration: 16–24 oz + sodium if sweaty session",
       examples: recoveryFoods,
     },
     {
       time: meal6Time,
-      title: "Dinner",
+      title: "Dinner — Recovery + Reset",
       desc: form.doubleDay
-        ? "Go bigger here: full carbs, protein, sodium, and fluids."
-        : "Finish with a balanced meal that helps overnight recovery.",
-      examples: ["rice / potatoes / pasta", "protein source", "vegetables", "water + electrolytes if needed"],
+        ? "Go bigger here. Heavy days need carbs, protein, fluids, and enough total intake to actually recover."
+        : "Finish with a full balanced meal that supports recovery, sleep, and tomorrow’s training.",
+      macros: `Target: ~${Math.round(carbs * 0.14)}g carbs + ${Math.round(protein * 0.18)}g protein`,
+      hydration: "Hydration: Finish the rest of your daily target",
+      examples: ["rice / potatoes / pasta", "protein source", "vegetables", "fruit or dairy"],
     },
   ];
 
   if (form.doubleDay) {
-    items.splice(2, 0, {
-      time: formatTime(practice - 300),
-      title: "Extra fuel block",
-      desc: "Add extra fuel because your workload is higher than normal.",
-      examples: ["bagel", "trail mix", "fruit", "sports drink"],
+    items.splice(3, 0, {
+      time: formatTime(practice - 270),
+      title: "Extra Fuel Block",
+      desc: "Because your workload is higher than normal, you need an added fuel block instead of pretending a standard day is enough.",
+      macros: `Target: ~${Math.round(carbs * 0.1)}g carbs + ${Math.round(protein * 0.08)}g protein`,
+      hydration: "Hydration: 10–16 oz",
+      examples: ["bagel", "trail mix", "fruit", "sports drink", "yogurt"],
     });
   }
 
+  const meetGameDay = {
+    nightBefore:
+      "Eat a normal solid dinner with carbs, protein, fluids, and sodium. Do not try to 'eat perfect' by underfueling.",
+    preEvent:
+      form.stomachSensitivity === "sensitive"
+        ? "Use easier carbs like toast, banana, applesauce, rice, or a sports drink."
+        : "Use a carb-based meal 2–4 hours before with lighter protein and lower-fat foods.",
+    during:
+      "Between events, keep using small carbs, fluids, and electrolytes instead of waiting until you feel drained.",
+    after:
+      "Recover quickly with fluids, carbs, and protein so the rest of the day or next day does not fall apart.",
+  };
+
+  const recoveryTips = [
+    `Protein target: ${protein}g/day split across the day instead of all at night.`,
+    `Hydration target: ${hydrationOz}–${hydrationOz + 16} oz/day.`,
+    `Sleep matters more when soreness is ${form.soreness}. Protect your last meal and hydration.`,
+    form.caffeine === "daily"
+      ? "Be careful not to rely on caffeine to cover up underfueling."
+      : "Do not use caffeine as your whole energy strategy.",
+  ];
+
   return {
-    title: form.sport === "swimming" ? "Your Swim Fuel Plan" : "Your Training Fuel Plan",
-    profileSummary,
+    title,
+    previewTitle,
+    previewSummary,
+    profileSummary: previewSummary,
     whyThisWorks,
-    proteinTarget,
-    hydrationTarget,
     carbFocus,
+    hydrationTarget: `${hydrationOz}–${hydrationOz + 16} oz/day`,
+    duringTraining,
+    macros: getMacroSummary(form, calories, protein, carbs, fat),
     items,
+    meetGameDay,
+    recoveryTips,
+    thisIsForYou: getThisIsForYouItems(form),
+    athleteType,
   };
 }
 
@@ -235,11 +450,11 @@ function Field({ label, children }) {
   );
 }
 
-function SectionHeading({ eyebrow, title, text, center }) {
+function SectionHeading({ eyebrow, title, text, center = false }) {
   return (
     <div
       style={{
-        maxWidth: 760,
+        maxWidth: 780,
         margin: center ? "0 auto" : 0,
         textAlign: center ? "center" : "left",
       }}
@@ -269,59 +484,97 @@ function LandingPage({
               <div style={styles.logo}>PF</div>
               <div>
                 <div style={styles.logoTitle}>PeakFuel</div>
-                <div style={styles.logoSub}>Fuel smarter. Recover stronger.</div>
+                <div style={styles.logoSub}>Daily fuel system for athletes</div>
               </div>
             </div>
+
             <nav style={styles.nav}>
               <a href="#builder" style={styles.navLink}>Builder</a>
               <a href="#preview" style={styles.navLink}>Preview</a>
               <a href="#pricing" style={styles.navLink}>Pricing</a>
             </nav>
-            <a href="#builder" style={styles.headerCta}>Build My Plan</a>
+
+            <a href="#builder" style={styles.headerCta}>Build My System</a>
           </header>
 
           <div style={styles.heroGrid}>
             <div>
               <div style={styles.badge}>Built for real athlete schedules</div>
-              <h1 style={styles.heroTitle}>Get a fueling plan that actually fits your day.</h1>
+
+              <h1 style={styles.heroTitle}>
+                Stop guessing what to eat. Fuel like a real athlete.
+              </h1>
+
               <p style={styles.heroText}>
-                Enter your sport, schedule, training load, and goal to generate a more
-                specific athlete fueling plan with exact timing, food ideas, recovery
-                guidance, and hydration targets.
+                PeakFuel builds your exact daily eating schedule, macro targets,
+                hydration, and recovery strategy based on your sport, training time,
+                workload, and goals.
               </p>
+
               <div style={styles.heroButtons}>
                 <a href="#builder" style={styles.primaryBtn}>Build Your Plan</a>
-                <a href="#preview" style={styles.secondaryBtn}>See Preview</a>
+                <a href="#preview" style={styles.secondaryBtn}>See Live Preview</a>
+              </div>
+
+              <div style={styles.heroTrustRow}>
+                <div style={styles.heroTrustPill}>Exact daily structure</div>
+                <div style={styles.heroTrustPill}>Built from your schedule</div>
+                <div style={styles.heroTrustPill}>One-time purchase</div>
               </div>
             </div>
 
             <div style={styles.previewShell}>
               <div style={styles.previewTopCard}>
                 <div style={styles.previewTopMeta}>Live preview</div>
-                <div style={styles.previewTitle}>{plan.title}</div>
-                <div style={styles.previewSummary}>{plan.profileSummary}</div>
+                <div style={styles.previewTitle}>{plan.previewTitle}</div>
+                <div style={styles.previewSummary}>{plan.previewSummary}</div>
               </div>
 
               <div id="preview" style={styles.previewListWrap}>
+                <div style={styles.previewMetricsGrid}>
+                  <div style={styles.metricCard}>
+                    <div style={styles.metricLabel}>Protein</div>
+                    <div style={styles.metricValue}>{plan.macros.protein}</div>
+                  </div>
+                  <div style={styles.metricCard}>
+                    <div style={styles.metricLabel}>Carbs</div>
+                    <div style={styles.metricValue}>{plan.macros.carbs}</div>
+                  </div>
+                  <div style={styles.metricCard}>
+                    <div style={styles.metricLabel}>Hydration</div>
+                    <div style={styles.metricValue}>{plan.hydrationTarget}</div>
+                  </div>
+                </div>
+
                 {plan.items.slice(0, 3).map((item) => (
                   <div key={item.time + item.title} style={styles.previewItem}>
                     <div style={styles.timeBox}>{item.time}</div>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div style={styles.itemTitle}>{item.title}</div>
                       <div style={styles.itemDesc}>{item.desc}</div>
+                      <div style={styles.itemSubMeta}>{item.macros}</div>
                     </div>
                   </div>
                 ))}
 
                 <div style={styles.lockedBlock}>
-                  <div style={styles.lockedBadge}>Full plan preview</div>
-                  <div style={styles.lockedTitle}>Unlock your full optimized plan</div>
+                  <div style={styles.lockedBadge}>Full system preview</div>
+                  <div style={styles.lockedTitle}>Unlock your full fuel system</div>
                   <div style={styles.lockedText}>
-                    Get your full day structure, food examples, hydration target, protein
-                    target, and recovery strategy based on the answers you entered.
+                    Get your full day structure, exact macros, hydration target,
+                    pre / during / post-workout strategy, meet or game day version,
+                    and recovery guidance built from your inputs.
                   </div>
+
+                  <div style={styles.lockedFeatureGrid}>
+                    <div style={styles.lockedFeature}>✓ Exact calories + macros</div>
+                    <div style={styles.lockedFeature}>✓ Hydration in ounces</div>
+                    <div style={styles.lockedFeature}>✓ Meet / game day version</div>
+                    <div style={styles.lockedFeature}>✓ Recovery system</div>
+                  </div>
+
                   <button onClick={startCheckout} style={styles.primaryDarkButton}>
-                    Get Instant Access
+                    Get Instant Access — $4.99
                   </button>
                 </div>
               </div>
@@ -330,13 +583,53 @@ function LandingPage({
         </div>
       </section>
 
-      <section id="builder" style={styles.containerSection}>
+      <section style={styles.lightSection}>
+        <div style={styles.container}>
+          <div style={styles.forYouSection}>
+            <div>
+              <SectionHeading
+                eyebrow="This is for you"
+                title="Made for athletes who train hard but still end up guessing their nutrition"
+                text="PeakFuel is built for athletes who want their food, hydration, and recovery to actually match their training."
+              />
+            </div>
+
+            <div style={styles.forYouCard}>
+              {plan.thisIsForYou.map((item) => (
+                <div key={item} style={styles.forYouRow}>
+                  <span style={styles.forYouCheck}>✓</span>
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style={styles.containerSection}>
+        <div style={styles.trustStrip}>
+          <div style={styles.trustStripItem}>
+            <div style={styles.trustStripTitle}>Built for real schedules</div>
+            <div style={styles.trustStripText}>School, lifting, practice, dinner, recovery.</div>
+          </div>
+          <div style={styles.trustStripItem}>
+            <div style={styles.trustStripTitle}>Designed for performance</div>
+            <div style={styles.trustStripText}>Not generic meal tips. A structured fuel system.</div>
+          </div>
+          <div style={styles.trustStripItem}>
+            <div style={styles.trustStripTitle}>Made for athletes</div>
+            <div style={styles.trustStripText}>Useful for high school, club, and serious training.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="builder" style={styles.containerSectionTight}>
         <div style={styles.twoCol}>
           <div>
             <SectionHeading
               eyebrow="Builder"
-              title="Build a more tailored plan"
-              text="Answer a few more specific questions so the final plan feels worth buying."
+              title="Build your full plan with more specific inputs"
+              text="The more accurate your schedule, habits, and training details are, the stronger your final system becomes."
             />
 
             <div style={styles.formCard}>
@@ -362,7 +655,7 @@ function LandingPage({
                   </select>
                 </Field>
 
-                <Field label="Goal">
+                <Field label="Primary goal">
                   <select
                     value={form.goal}
                     onChange={(e) => updateField("goal", e.target.value)}
@@ -395,6 +688,15 @@ function LandingPage({
                   />
                 </Field>
 
+                <Field label="Height (optional)">
+                  <input
+                    value={form.height}
+                    onChange={(e) => updateField("height", e.target.value)}
+                    placeholder={`5'11"`}
+                    style={styles.input}
+                  />
+                </Field>
+
                 <Field label="Training intensity">
                   <select
                     value={form.intensity}
@@ -416,6 +718,30 @@ function LandingPage({
                   />
                 </Field>
 
+                <Field label="Training type">
+                  <select
+                    value={form.trainingType}
+                    onChange={(e) => updateField("trainingType", e.target.value)}
+                    style={styles.input}
+                  >
+                    {trainingTypeOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Body goal">
+                  <select
+                    value={form.bodyGoal}
+                    onChange={(e) => updateField("bodyGoal", e.target.value)}
+                    style={styles.input}
+                  >
+                    {bodyGoalOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
                 <Field label="Wake time">
                   <input
                     type="time"
@@ -425,7 +751,7 @@ function LandingPage({
                   />
                 </Field>
 
-                <Field label="School start">
+                <Field label="School / work start">
                   <input
                     type="time"
                     value={form.schoolStart}
@@ -434,7 +760,7 @@ function LandingPage({
                   />
                 </Field>
 
-                <Field label="Practice time">
+                <Field label="Practice / training time">
                   <input
                     type="time"
                     value={form.practiceTime}
@@ -463,6 +789,66 @@ function LandingPage({
                     ))}
                   </select>
                 </Field>
+
+                <Field label="Current hydration habits">
+                  <select
+                    value={form.currentHydration}
+                    onChange={(e) => updateField("currentHydration", e.target.value)}
+                    style={styles.input}
+                  >
+                    {hydrationOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Caffeine use">
+                  <select
+                    value={form.caffeine}
+                    onChange={(e) => updateField("caffeine", e.target.value)}
+                    style={styles.input}
+                  >
+                    {caffeineOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Competition frequency">
+                  <select
+                    value={form.competitionFrequency}
+                    onChange={(e) => updateField("competitionFrequency", e.target.value)}
+                    style={styles.input}
+                  >
+                    {competitionOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Current eating structure">
+                  <select
+                    value={form.eatingPattern}
+                    onChange={(e) => updateField("eatingPattern", e.target.value)}
+                    style={styles.input}
+                  >
+                    {eatingPatternOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Current soreness / fatigue">
+                  <select
+                    value={form.soreness}
+                    onChange={(e) => updateField("soreness", e.target.value)}
+                    style={styles.input}
+                  >
+                    {sorenessOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
               </div>
 
               <label style={styles.checkboxRow}>
@@ -476,7 +862,7 @@ function LandingPage({
 
               <div style={styles.buttonRow}>
                 <button onClick={startCheckout} style={styles.primaryDarkButton}>
-                  Unlock My Full Plan
+                  Unlock My Full System
                 </button>
                 <button onClick={savePreview} style={styles.secondaryBtnButton}>
                   Save Preview
@@ -489,19 +875,28 @@ function LandingPage({
 
           <div>
             <div style={styles.sideCard}>
-              <div style={styles.sideCardTop}>What the paid plan includes</div>
+              <div style={styles.sideCardTop}>What your paid plan includes</div>
+
               {[
-                "More specific timing based on your actual schedule",
-                "Protein target and hydration target",
-                "Example foods for each fuel block",
-                "Recovery guidance based on your goal",
-                "Extra structure for heavy or double-day training",
+                "Exact calories, protein, carbs, and fats",
+                "Daily hydration target in ounces",
+                "Pre, during, and post-workout strategy",
+                "Full daily meal timing structure",
+                "Meet / game day fueling version",
+                "Recovery tips based on your goal and load",
               ].map((text) => (
                 <div key={text} style={styles.bulletRow}>
                   <span style={styles.bulletDot}>✓</span>
                   <span>{text}</span>
                 </div>
               ))}
+            </div>
+
+            <div style={styles.quoteCard}>
+              <div style={styles.quoteText}>
+                “This feels like something an athlete would actually use, not just generic nutrition advice.”
+              </div>
+              <div style={styles.quoteSub}>Built to feel practical, specific, and worth buying.</div>
             </div>
           </div>
         </div>
@@ -511,10 +906,11 @@ function LandingPage({
         <div style={styles.container}>
           <SectionHeading
             eyebrow="Pricing"
-            title="One simple plan. Instant access."
-            text="A one-time purchase for a more detailed athlete fueling plan."
+            title="One simple purchase. Instant access."
+            text="A one-time purchase for your full personalized athlete fueling system."
             center
           />
+
           <div style={styles.pricingGridSingle}>
             {planTiers.map((tier) => (
               <div key={tier.key} style={styles.priceCardHero}>
@@ -522,14 +918,20 @@ function LandingPage({
                 <div style={styles.priceName}>{tier.name}</div>
                 <div style={styles.priceValue}>{tier.price}</div>
                 <div style={styles.priceDescFeatured}>{tier.description}</div>
+
                 <div style={styles.priceFeatures}>
                   {tier.features.map((item) => (
                     <div key={item} style={styles.priceFeatureDark}>✓ {item}</div>
                   ))}
                 </div>
+
                 <button onClick={startCheckout} style={styles.primaryDarkButtonFull}>
                   Get Instant Access
                 </button>
+
+                <div style={styles.miniTrustText}>
+                  One-time payment. No subscription.
+                </div>
               </div>
             ))}
           </div>
@@ -539,7 +941,7 @@ function LandingPage({
   );
 }
 
-function ResultsPage({ plan, form, isPaid }) {
+function ResultsPage({ plan, isPaid }) {
   if (!isPaid) {
     return (
       <section style={styles.resultsHero}>
@@ -548,7 +950,7 @@ function ResultsPage({ plan, form, isPaid }) {
             <div style={styles.lockedBadge}>Locked</div>
             <h1 style={styles.resultsTitle}>This plan is not unlocked yet.</h1>
             <p style={styles.resultsText}>
-              Complete checkout first, then return here to see your full plan.
+              Complete checkout first, then return here to see your full system.
             </p>
             <a href="/" style={styles.primaryBtn}>Go back</a>
           </div>
@@ -565,46 +967,94 @@ function ResultsPage({ plan, form, isPaid }) {
           <h1 style={styles.resultsTitle}>{plan.title}</h1>
           <p style={styles.resultsText}>{plan.profileSummary}</p>
 
-          <div style={styles.resultsSummaryGrid}>
+          <div style={styles.resultsSummaryGridFour}>
             <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Protein target</div>
-              <div style={styles.summaryValue}>{plan.proteinTarget}</div>
+              <div style={styles.summaryLabel}>Calories</div>
+              <div style={styles.summaryValue}>{plan.macros.calories}</div>
             </div>
             <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Hydration target</div>
-              <div style={styles.summaryValue}>{plan.hydrationTarget}</div>
+              <div style={styles.summaryLabel}>Protein</div>
+              <div style={styles.summaryValue}>{plan.macros.protein}</div>
             </div>
             <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Carb focus</div>
-              <div style={styles.summaryValue}>{plan.carbFocus}</div>
+              <div style={styles.summaryLabel}>Carbs</div>
+              <div style={styles.summaryValue}>{plan.macros.carbs}</div>
+            </div>
+            <div style={styles.summaryBox}>
+              <div style={styles.summaryLabel}>Fat</div>
+              <div style={styles.summaryValue}>{plan.macros.fat}</div>
+            </div>
+          </div>
+
+          <div style={styles.resultsSummaryGridTwo}>
+            <div style={styles.bigInfoCard}>
+              <div style={styles.bigInfoTitle}>Daily hydration target</div>
+              <div style={styles.bigInfoValue}>{plan.hydrationTarget}</div>
+              <div style={styles.bigInfoText}>During training: {plan.duringTraining}</div>
+            </div>
+            <div style={styles.bigInfoCard}>
+              <div style={styles.bigInfoTitle}>Carb focus</div>
+              <div style={styles.bigInfoText}>{plan.carbFocus}</div>
             </div>
           </div>
 
           <div style={styles.whyBox}>
-            <div style={styles.whyTitle}>Why this plan works</div>
+            <div style={styles.whyTitle}>Why this system works</div>
             <div style={styles.whyText}>{plan.whyThisWorks}</div>
           </div>
 
-          <div style={styles.fullPlanWrap}>
-            {plan.items.map((item) => (
-              <div key={item.time + item.title} style={styles.fullPlanItem}>
-                <div style={styles.timeBox}>{item.time}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={styles.itemTitle}>{item.title}</div>
-                  <div style={styles.itemDesc}>{item.desc}</div>
-                  <ul style={styles.examplesList}>
-                    {item.examples.map((example) => (
-                      <li key={example}>{example}</li>
-                    ))}
-                  </ul>
+          <div style={styles.sectionBlock}>
+            <div style={styles.resultsBlockTitle}>Your full day schedule</div>
+
+            <div style={styles.fullPlanWrap}>
+              {plan.items.map((item) => (
+                <div key={item.time + item.title} style={styles.fullPlanItem}>
+                  <div style={styles.timeBox}>{item.time}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={styles.itemTitle}>{item.title}</div>
+                    <div style={styles.itemDesc}>{item.desc}</div>
+                    <div style={styles.resultMetaLine}>{item.macros}</div>
+                    <div style={styles.resultMetaLine}>{item.hydration}</div>
+                    <ul style={styles.examplesList}>
+                      {item.examples.map((example) => (
+                        <li key={example}>{example}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={styles.resultsSummaryGridTwo}>
+            <div style={styles.sectionMiniCard}>
+              <div style={styles.resultsBlockTitle}>Meet / game day version</div>
+              <div style={styles.smallResultBlock}>
+                <strong>Night before:</strong> {plan.meetGameDay.nightBefore}
               </div>
-            ))}
+              <div style={styles.smallResultBlock}>
+                <strong>Pre-event:</strong> {plan.meetGameDay.preEvent}
+              </div>
+              <div style={styles.smallResultBlock}>
+                <strong>During:</strong> {plan.meetGameDay.during}
+              </div>
+              <div style={styles.smallResultBlock}>
+                <strong>After:</strong> {plan.meetGameDay.after}
+              </div>
+            </div>
+
+            <div style={styles.sectionMiniCard}>
+              <div style={styles.resultsBlockTitle}>Recovery system</div>
+              {plan.recoveryTips.map((tip) => (
+                <div key={tip} style={styles.smallResultBlock}>
+                  ✓ {tip}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div style={styles.noteBox}>
-            This is a general educational fueling plan, not medical advice. Adjust foods
-            based on allergies, preferences, and coach or dietitian guidance.
+            This is general educational fueling guidance, not medical advice. Adjust for allergies, preferences, medical needs, and coach or dietitian guidance.
           </div>
 
           <div style={{ marginTop: 20 }}>
@@ -623,14 +1073,22 @@ export default function PeakFuelWebsite() {
     goal: "perform",
     ageRange: "16-18",
     weight: "150",
+    height: "",
     intensity: "hard",
     duration: "90",
+    trainingType: "mixed",
+    bodyGoal: "maintain",
     wakeTime: "06:30",
     schoolStart: "08:00",
     practiceTime: "15:45",
     bedTime: "22:30",
     doubleDay: false,
     stomachSensitivity: "normal",
+    currentHydration: "okay",
+    caffeine: "none",
+    competitionFrequency: "sometimes",
+    eatingPattern: "somewhat",
+    soreness: "medium",
   });
 
   const [leadMessage, setLeadMessage] = useState("");
@@ -686,7 +1144,7 @@ export default function PeakFuelWebsite() {
 
   function startCheckout() {
     if (!form.email.trim()) {
-      setLeadMessage("Enter your email first before unlocking your full plan.");
+      setLeadMessage("Enter your email first before unlocking your full system.");
       return;
     }
 
@@ -705,7 +1163,7 @@ export default function PeakFuelWebsite() {
     <div style={styles.page}>
       <style>{globalCss}</style>
       {path === "/results" ? (
-        <ResultsPage plan={plan} form={form} isPaid={isPaid} />
+        <ResultsPage plan={plan} isPaid={isPaid} />
       ) : (
         <LandingPage
           form={form}
@@ -725,16 +1183,36 @@ const styles = {
     background: "#ffffff",
     color: "#09090b",
     minHeight: "100vh",
-    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
-  container: { maxWidth: 1200, margin: "0 auto", padding: "0 24px" },
-  containerSection: { maxWidth: 1200, margin: "0 auto", padding: "24px 24px 96px" },
+
+  container: {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: "0 24px",
+  },
+
+  containerSection: {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: "32px 24px 96px",
+  },
+
+  containerSectionTight: {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: "12px 24px 96px",
+  },
+
   heroWrap: {
     position: "relative",
     overflow: "hidden",
     borderBottom: "1px solid #e4e4e7",
-    background: "radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 28%), linear-gradient(to bottom, #ffffff, #f8fbff)",
+    background:
+      "radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 28%), linear-gradient(to bottom, #ffffff, #f8fbff)",
   },
+
   gridBg: {
     position: "absolute",
     inset: 0,
@@ -744,6 +1222,7 @@ const styles = {
     backgroundSize: "42px 42px",
     pointerEvents: "none",
   },
+
   header: {
     position: "relative",
     zIndex: 2,
@@ -755,11 +1234,13 @@ const styles = {
     marginTop: 24,
     border: "1px solid rgba(228,228,231,0.9)",
     borderRadius: 28,
-    background: "rgba(255,255,255,0.86)",
+    background: "rgba(255,255,255,0.88)",
     backdropFilter: "blur(12px)",
     boxShadow: "0 8px 30px rgba(0,0,0,0.04)",
   },
+
   logoWrap: { display: "flex", alignItems: "center", gap: 12 },
+
   logo: {
     width: 44,
     height: 44,
@@ -771,10 +1252,24 @@ const styles = {
     fontWeight: 800,
     fontSize: 14,
   },
+
   logoTitle: { fontSize: 14, fontWeight: 700 },
   logoSub: { fontSize: 12, color: "#71717a" },
-  nav: { display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" },
-  navLink: { color: "#52525b", textDecoration: "none", fontSize: 14, fontWeight: 600 },
+
+  nav: {
+    display: "flex",
+    gap: 24,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  navLink: {
+    color: "#52525b",
+    textDecoration: "none",
+    fontSize: 14,
+    fontWeight: 600,
+  },
+
   headerCta: {
     background: "#09090b",
     color: "white",
@@ -784,6 +1279,7 @@ const styles = {
     fontWeight: 700,
     fontSize: 14,
   },
+
   heroGrid: {
     position: "relative",
     zIndex: 2,
@@ -791,25 +1287,28 @@ const styles = {
     gridTemplateColumns: "1.05fr 0.95fr",
     gap: 48,
     alignItems: "center",
-    padding: "72px 0 96px",
+    padding: "72px 0 88px",
   },
+
   badge: {
     display: "inline-flex",
     padding: "8px 14px",
     borderRadius: 999,
-    background: "rgba(255,255,255,0.86)",
+    background: "rgba(255,255,255,0.9)",
     color: "#0369a1",
     border: "1px solid #bae6fd",
     fontWeight: 700,
     fontSize: 12,
   },
+
   heroTitle: {
-    fontSize: 64,
-    lineHeight: 1.02,
-    letterSpacing: "-0.04em",
+    fontSize: 66,
+    lineHeight: 1.01,
+    letterSpacing: "-0.05em",
     margin: "24px 0 0",
     maxWidth: 760,
   },
+
   heroText: {
     marginTop: 24,
     maxWidth: 700,
@@ -817,7 +1316,31 @@ const styles = {
     fontSize: 20,
     lineHeight: 1.7,
   },
-  heroButtons: { display: "flex", gap: 16, marginTop: 32, flexWrap: "wrap" },
+
+  heroButtons: {
+    display: "flex",
+    gap: 16,
+    marginTop: 32,
+    flexWrap: "wrap",
+  },
+
+  heroTrustRow: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 22,
+  },
+
+  heroTrustPill: {
+    padding: "10px 14px",
+    borderRadius: 999,
+    background: "#ffffff",
+    border: "1px solid #e4e4e7",
+    color: "#27272a",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+
   primaryBtn: {
     background: "#0ea5e9",
     color: "white",
@@ -827,6 +1350,7 @@ const styles = {
     fontWeight: 800,
     display: "inline-block",
   },
+
   secondaryBtn: {
     background: "white",
     color: "#09090b",
@@ -837,6 +1361,7 @@ const styles = {
     border: "1px solid #d4d4d8",
     display: "inline-block",
   },
+
   secondaryBtnButton: {
     background: "white",
     color: "#09090b",
@@ -846,9 +1371,10 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   primaryDarkButton: {
     display: "inline-block",
-    marginTop: 16,
+    marginTop: 12,
     background: "#09090b",
     color: "white",
     border: 0,
@@ -857,6 +1383,7 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   primaryDarkButtonFull: {
     display: "block",
     width: "100%",
@@ -870,13 +1397,16 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   previewShell: { position: "relative" },
+
   previewTopCard: {
     background: "linear-gradient(135deg, #0ea5e9, #22d3ee 45%, #111827)",
     color: "white",
     borderRadius: 30,
     padding: 24,
   },
+
   previewTopMeta: {
     textTransform: "uppercase",
     letterSpacing: ".2em",
@@ -884,20 +1414,59 @@ const styles = {
     fontWeight: 800,
     color: "rgba(255,255,255,0.82)",
   },
-  previewTitle: { fontSize: 30, fontWeight: 800, lineHeight: 1.1, marginTop: 12 },
+
+  previewTitle: {
+    fontSize: 30,
+    fontWeight: 800,
+    lineHeight: 1.1,
+    marginTop: 12,
+  },
+
   previewSummary: {
     marginTop: 10,
-    color: "rgba(255,255,255,0.88)",
+    color: "rgba(255,255,255,0.9)",
     lineHeight: 1.7,
     fontSize: 15,
   },
+
   previewListWrap: {
     marginTop: 18,
     background: "white",
     border: "1px solid #e4e4e7",
     borderRadius: 30,
     padding: 18,
+    boxShadow: "0 12px 30px rgba(0,0,0,0.04)",
   },
+
+  previewMetricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+    gap: 12,
+    marginBottom: 14,
+  },
+
+  metricCard: {
+    border: "1px solid #e4e4e7",
+    background: "#fafafa",
+    borderRadius: 20,
+    padding: 14,
+  },
+
+  metricLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#71717a",
+    textTransform: "uppercase",
+    letterSpacing: ".08em",
+  },
+
+  metricValue: {
+    marginTop: 8,
+    fontWeight: 800,
+    fontSize: 18,
+    lineHeight: 1.4,
+  },
+
   previewItem: {
     display: "flex",
     gap: 16,
@@ -907,6 +1476,7 @@ const styles = {
     padding: 16,
     marginBottom: 12,
   },
+
   timeBox: {
     minWidth: 92,
     background: "#09090b",
@@ -917,8 +1487,26 @@ const styles = {
     fontSize: 12,
     fontWeight: 800,
   },
-  itemTitle: { fontWeight: 800, fontSize: 16 },
-  itemDesc: { marginTop: 6, color: "#52525b", lineHeight: 1.7, fontSize: 14 },
+
+  itemTitle: {
+    fontWeight: 800,
+    fontSize: 16,
+  },
+
+  itemDesc: {
+    marginTop: 6,
+    color: "#52525b",
+    lineHeight: 1.7,
+    fontSize: 14,
+  },
+
+  itemSubMeta: {
+    marginTop: 10,
+    color: "#0369a1",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+
   lockedBlock: {
     border: "1px solid #bae6fd",
     background: "linear-gradient(135deg, #f0f9ff, #ffffff, #ecfeff)",
@@ -926,6 +1514,7 @@ const styles = {
     padding: 18,
     marginTop: 6,
   },
+
   lockedBadge: {
     display: "inline-block",
     background: "#09090b",
@@ -935,7 +1524,13 @@ const styles = {
     fontSize: 11,
     fontWeight: 800,
   },
-  lockedTitle: { fontWeight: 800, fontSize: 22, marginTop: 14 },
+
+  lockedTitle: {
+    fontWeight: 800,
+    fontSize: 22,
+    marginTop: 14,
+  },
+
   lockedText: {
     color: "#52525b",
     fontSize: 14,
@@ -943,12 +1538,91 @@ const styles = {
     marginTop: 8,
     marginBottom: 14,
   },
+
+  lockedFeatureGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  lockedFeature: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#0f172a",
+    background: "rgba(255,255,255,0.75)",
+    border: "1px solid #dbeafe",
+    borderRadius: 14,
+    padding: "10px 12px",
+  },
+
+  lightSection: {
+    background: "#ffffff",
+    padding: "72px 0 18px",
+  },
+
+  forYouSection: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 26,
+    alignItems: "center",
+  },
+
+  forYouCard: {
+    border: "1px solid #e4e4e7",
+    borderRadius: 30,
+    background: "linear-gradient(135deg, #ffffff, #fafafa)",
+    padding: 26,
+  },
+
+  forYouRow: {
+    display: "flex",
+    gap: 12,
+    alignItems: "flex-start",
+    padding: "14px 0",
+    borderBottom: "1px solid #f4f4f5",
+    fontSize: 16,
+    color: "#27272a",
+    lineHeight: 1.7,
+  },
+
+  forYouCheck: {
+    color: "#0284c7",
+    fontWeight: 900,
+  },
+
+  trustStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+    gap: 16,
+  },
+
+  trustStripItem: {
+    border: "1px solid #e4e4e7",
+    borderRadius: 24,
+    padding: 20,
+    background: "white",
+  },
+
+  trustStripTitle: {
+    fontWeight: 800,
+    fontSize: 18,
+  },
+
+  trustStripText: {
+    marginTop: 8,
+    color: "#52525b",
+    lineHeight: 1.7,
+    fontSize: 14,
+  },
+
   twoCol: {
     display: "grid",
     gridTemplateColumns: "1fr 0.92fr",
     gap: 36,
     alignItems: "start",
   },
+
   eyebrow: {
     color: "#0284c7",
     fontWeight: 800,
@@ -956,14 +1630,22 @@ const styles = {
     letterSpacing: ".24em",
     textTransform: "uppercase",
   },
+
   sectionTitle: {
     margin: "12px 0 0",
     fontWeight: 800,
-    fontSize: 44,
+    fontSize: 46,
     lineHeight: 1.08,
     letterSpacing: "-0.03em",
   },
-  sectionText: { color: "#52525b", fontSize: 18, lineHeight: 1.8, marginTop: 16 },
+
+  sectionText: {
+    color: "#52525b",
+    fontSize: 18,
+    lineHeight: 1.8,
+    marginTop: 16,
+  },
+
   formCard: {
     marginTop: 28,
     border: "1px solid #e4e4e7",
@@ -971,11 +1653,13 @@ const styles = {
     background: "linear-gradient(135deg, #ffffff, #fafafa)",
     padding: 24,
   },
+
   formGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0,1fr))",
     gap: 16,
   },
+
   label: {
     display: "block",
     fontSize: 14,
@@ -983,6 +1667,7 @@ const styles = {
     marginBottom: 8,
     color: "#3f3f46",
   },
+
   input: {
     width: "100%",
     padding: "14px 16px",
@@ -992,6 +1677,7 @@ const styles = {
     fontSize: 15,
     outline: "none",
   },
+
   checkboxRow: {
     display: "flex",
     gap: 10,
@@ -1004,15 +1690,33 @@ const styles = {
     fontSize: 14,
     color: "#3f3f46",
   },
-  buttonRow: { display: "flex", gap: 14, flexWrap: "wrap", marginTop: 18 },
-  helperText: { marginTop: 12, fontSize: 14, color: "#52525b" },
+
+  buttonRow: {
+    display: "flex",
+    gap: 14,
+    flexWrap: "wrap",
+    marginTop: 18,
+  },
+
+  helperText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#52525b",
+  },
+
   sideCard: {
     border: "1px solid #e4e4e7",
     borderRadius: 32,
     background: "white",
     padding: 24,
   },
-  sideCardTop: { fontSize: 22, fontWeight: 800, marginBottom: 14 },
+
+  sideCardTop: {
+    fontSize: 22,
+    fontWeight: 800,
+    marginBottom: 14,
+  },
+
   bulletRow: {
     display: "flex",
     gap: 12,
@@ -1023,14 +1727,47 @@ const styles = {
     lineHeight: 1.7,
     fontSize: 15,
   },
-  bulletDot: { color: "#0284c7", fontWeight: 900 },
-  pricingSection: { background: "#09090b", color: "white", padding: "96px 0" },
+
+  bulletDot: {
+    color: "#0284c7",
+    fontWeight: 900,
+  },
+
+  quoteCard: {
+    marginTop: 18,
+    border: "1px solid #e4e4e7",
+    borderRadius: 28,
+    background: "#fafafa",
+    padding: 22,
+  },
+
+  quoteText: {
+    fontSize: 18,
+    lineHeight: 1.7,
+    fontWeight: 700,
+    color: "#18181b",
+  },
+
+  quoteSub: {
+    marginTop: 10,
+    color: "#52525b",
+    fontSize: 14,
+    lineHeight: 1.7,
+  },
+
+  pricingSection: {
+    background: "#09090b",
+    color: "white",
+    padding: "96px 0",
+  },
+
   pricingGridSingle: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 520px)",
+    gridTemplateColumns: "minmax(0, 560px)",
     justifyContent: "center",
     marginTop: 38,
   },
+
   priceCardHero: {
     border: "2px solid #38bdf8",
     borderRadius: 36,
@@ -1038,6 +1775,7 @@ const styles = {
     background: "white",
     color: "#09090b",
   },
+
   priceBadgeFeatured: {
     display: "inline-block",
     borderRadius: 999,
@@ -1047,17 +1785,51 @@ const styles = {
     background: "#e0f2fe",
     color: "#0369a1",
   },
-  priceName: { marginTop: 18, fontSize: 28, fontWeight: 800 },
-  priceValue: { marginTop: 12, fontSize: 52, fontWeight: 900 },
-  priceDescFeatured: { marginTop: 14, color: "#52525b", lineHeight: 1.7 },
-  priceFeatures: { marginTop: 18, display: "grid", gap: 10 },
-  priceFeatureDark: { fontSize: 15, lineHeight: 1.7, color: "#27272a" },
+
+  priceName: {
+    marginTop: 18,
+    fontSize: 28,
+    fontWeight: 800,
+  },
+
+  priceValue: {
+    marginTop: 12,
+    fontSize: 56,
+    fontWeight: 900,
+  },
+
+  priceDescFeatured: {
+    marginTop: 14,
+    color: "#52525b",
+    lineHeight: 1.7,
+  },
+
+  priceFeatures: {
+    marginTop: 18,
+    display: "grid",
+    gap: 10,
+  },
+
+  priceFeatureDark: {
+    fontSize: 15,
+    lineHeight: 1.7,
+    color: "#27272a",
+  },
+
+  miniTrustText: {
+    marginTop: 14,
+    textAlign: "center",
+    color: "#71717a",
+    fontSize: 13,
+    fontWeight: 700,
+  },
 
   resultsHero: {
     padding: "48px 0 72px",
     background: "linear-gradient(to bottom, #f8fbff, #ffffff)",
     minHeight: "100vh",
   },
+
   resultsCard: {
     background: "white",
     border: "1px solid #e4e4e7",
@@ -1065,6 +1837,7 @@ const styles = {
     padding: 28,
     boxShadow: "0 12px 30px rgba(0,0,0,0.04)",
   },
+
   successBadge: {
     display: "inline-block",
     background: "#166534",
@@ -1074,30 +1847,42 @@ const styles = {
     fontSize: 11,
     fontWeight: 800,
   },
+
   resultsTitle: {
     fontSize: 44,
     lineHeight: 1.05,
     letterSpacing: "-0.03em",
     margin: "18px 0 0",
   },
+
   resultsText: {
     color: "#52525b",
     fontSize: 18,
     lineHeight: 1.7,
     marginTop: 14,
   },
-  resultsSummaryGrid: {
+
+  resultsSummaryGridFour: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+    gridTemplateColumns: "repeat(4, minmax(0,1fr))",
     gap: 16,
     marginTop: 28,
   },
+
+  resultsSummaryGridTwo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+    gap: 16,
+    marginTop: 18,
+  },
+
   summaryBox: {
     border: "1px solid #e4e4e7",
     borderRadius: 24,
     padding: 18,
     background: "#fafafa",
   },
+
   summaryLabel: {
     fontSize: 12,
     textTransform: "uppercase",
@@ -1105,12 +1890,43 @@ const styles = {
     color: "#71717a",
     fontWeight: 700,
   },
+
   summaryValue: {
     marginTop: 10,
     fontWeight: 800,
     fontSize: 18,
     lineHeight: 1.5,
   },
+
+  bigInfoCard: {
+    border: "1px solid #e4e4e7",
+    borderRadius: 24,
+    padding: 20,
+    background: "#ffffff",
+  },
+
+  bigInfoTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#18181b",
+    textTransform: "uppercase",
+    letterSpacing: ".08em",
+  },
+
+  bigInfoValue: {
+    marginTop: 10,
+    fontSize: 28,
+    fontWeight: 900,
+    lineHeight: 1.2,
+  },
+
+  bigInfoText: {
+    marginTop: 10,
+    color: "#52525b",
+    lineHeight: 1.7,
+    fontSize: 15,
+  },
+
   whyBox: {
     marginTop: 22,
     border: "1px solid #bae6fd",
@@ -1118,13 +1934,33 @@ const styles = {
     borderRadius: 24,
     padding: 18,
   },
-  whyTitle: { fontWeight: 800, fontSize: 18 },
-  whyText: { marginTop: 8, color: "#52525b", lineHeight: 1.7 },
-  fullPlanWrap: {
+
+  whyTitle: {
+    fontWeight: 800,
+    fontSize: 18,
+  },
+
+  whyText: {
+    marginTop: 8,
+    color: "#52525b",
+    lineHeight: 1.7,
+  },
+
+  sectionBlock: {
     marginTop: 24,
+  },
+
+  resultsBlockTitle: {
+    fontWeight: 800,
+    fontSize: 24,
+    marginBottom: 14,
+  },
+
+  fullPlanWrap: {
     display: "grid",
     gap: 14,
   },
+
   fullPlanItem: {
     display: "flex",
     gap: 16,
@@ -1133,6 +1969,14 @@ const styles = {
     borderRadius: 24,
     padding: 18,
   },
+
+  resultMetaLine: {
+    marginTop: 8,
+    color: "#0369a1",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+
   examplesList: {
     marginTop: 10,
     marginBottom: 0,
@@ -1140,6 +1984,22 @@ const styles = {
     color: "#27272a",
     lineHeight: 1.8,
   },
+
+  sectionMiniCard: {
+    border: "1px solid #e4e4e7",
+    borderRadius: 24,
+    padding: 20,
+    background: "#ffffff",
+  },
+
+  smallResultBlock: {
+    padding: "10px 0",
+    borderBottom: "1px solid #f4f4f5",
+    color: "#3f3f46",
+    lineHeight: 1.7,
+    fontSize: 15,
+  },
+
   noteBox: {
     marginTop: 22,
     borderTop: "1px solid #e4e4e7",
@@ -1153,25 +2013,35 @@ const styles = {
 const globalCss = `
   html { scroll-behavior: smooth; }
   * { box-sizing: border-box; }
-  body { margin: 0; }
-  a, button { transition: transform .18s ease, opacity .18s ease, background .18s ease; }
+  body { margin: 0; background: #ffffff; }
+  a, button { transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease; }
   a:hover, button:hover { transform: translateY(-1px); }
-  input:focus, select:focus { border-color: #38bdf8 !important; box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12); }
+  input:focus, select:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
+  }
 
-  @media (max-width: 960px) {
+  @media (max-width: 1100px) {
     div[style*="grid-template-columns: 1.05fr 0.95fr"],
     div[style*="grid-template-columns: 1fr 0.92fr"],
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"] {
+    div[style*="grid-template-columns: 1fr 1fr"],
+    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"],
+    div[style*="grid-template-columns: repeat(4, minmax(0,1fr))"],
+    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
       grid-template-columns: 1fr !important;
     }
-    h1 { font-size: 42px !important; }
+  }
+
+  @media (max-width: 960px) {
+    h1 { font-size: 46px !important; }
+    h2 { font-size: 34px !important; }
   }
 
   @media (max-width: 640px) {
     div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
       grid-template-columns: 1fr !important;
     }
-    h1 { font-size: 36px !important; }
+    h1 { font-size: 38px !important; }
     h2 { font-size: 30px !important; }
   }
 `;
