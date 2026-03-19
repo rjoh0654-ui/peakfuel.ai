@@ -2057,11 +2057,20 @@ const styles = {
 const globalCss = `
   html { scroll-behavior: smooth; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #ffffff; overflow-x: hidden; }
+  body {
+    margin: 0;
+    background: #ffffff;
+    overflow-x: hidden;
+  }
+
   a, button {
     transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease;
   }
-  a:hover, button:hover { transform: translateY(-1px); }
+
+  a:hover, button:hover {
+    transform: translateY(-1px);
+  }
+
   input:focus, select:focus {
     border-color: #38bdf8 !important;
     box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
@@ -2100,25 +2109,29 @@ const globalCss = `
       gap: 24px !important;
     }
 
-    div[style*="padding: 16px"][style*="border-radius: 28px"] {
-      padding: 14px !important;
-      gap: 10px !important;
-      align-items: flex-start !important;
+    div[style*="padding: 16px"][style*="margin-top: 24px"][style*="border-radius: 28px"] {
+      padding: 18px !important;
     }
 
     div[style*="display: flex"][style*="justify-content: space-between"][style*="backdrop-filter: blur(12px)"] {
       flex-direction: column !important;
       align-items: stretch !important;
+      gap: 18px !important;
     }
 
-    div[style*="gap: 24px"][style*="flex-wrap: wrap"] {
-      gap: 12px !important;
-      justify-content: flex-start !important;
+    div[style*="display: flex"][style*="gap: 24px"][style*="align-items: center"][style*="flex-wrap: wrap"] {
+      justify-content: center !important;
+      gap: 16px !important;
     }
 
     a[style*="padding: 12px 16px"][style*="border-radius: 16px"] {
       width: 100% !important;
       text-align: center !important;
+    }
+
+    div[style*="gap: 24px"][style*="flex-wrap: wrap"] {
+      gap: 12px !important;
+      justify-content: flex-start !important;
     }
 
     div[style*="margin-top: 28px"][style*="flex-wrap: wrap"] {
@@ -2157,12 +2170,28 @@ const globalCss = `
       border-radius: 24px !important;
     }
 
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"] {
+    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
       grid-template-columns: 1fr !important;
     }
 
-    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
-      grid-template-columns: 1fr !important;
+    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] {
+      grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    }
+
+    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] > div:last-child {
+      grid-column: 1 / -1 !important;
+    }
+
+    div[style*="background: #fafafa"][style*="border-radius: 20px"][style*="padding: 14px"] {
+      padding: 16px !important;
+      min-height: 120px !important;
+    }
+
+    div[style*="margin-top: 8px"][style*="font-weight: 800"][style*="font-size: 18px"] {
+      font-size: 17px !important;
+      line-height: 1.25 !important;
+      word-break: normal !important;
+      overflow-wrap: anywhere !important;
     }
 
     div[style*="display: flex"][style*="border-radius: 24px"][style*="margin-bottom: 12px"] {
@@ -2229,18 +2258,29 @@ const globalCss = `
       line-height: 1.08 !important;
     }
 
-    div[style*="font-size: 18"][style*="line-height: 1.8"] {
-      font-size: 16px !important;
-      line-height: 1.65 !important;
-    }
-
     div[style*="padding: 24px"][style*="border-radius: 32px"] {
       padding: 18px !important;
       border-radius: 24px !important;
     }
 
-    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"][style*="gap: 16px"] {
-      grid-template-columns: 1fr !important;
+    label[style*="display: block"][style*="font-size: 14px"] {
+      margin-bottom: 8px !important;
+    }
+
+    input, select {
+      height: 56px !important;
+      min-height: 56px !important;
+      padding: 0 14px !important;
+      font-size: 16px !important;
+    }
+
+    input[type="time"] {
+      height: 56px !important;
+      min-height: 56px !important;
+      padding: 0 14px !important;
+      line-height: 56px !important;
+      -webkit-appearance: none;
+      appearance: none;
     }
 
     label[style*="padding: 16px"][style*="border-radius: 18px"] {
