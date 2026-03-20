@@ -4,7 +4,7 @@ const checkoutLinks = {
   instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
 };
 
-const STORAGE_KEY = "peakfuel_checkout_plan_v3";
+const STORAGE_KEY = "peakfuel_checkout_plan_v6";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -86,6 +86,36 @@ const sorenessOptions = [
   ["high", "High"],
 ];
 
+const sweatOptions = [
+  ["light", "Light sweater"],
+  ["normal", "Average sweater"],
+  ["heavy", "Heavy sweater / salty sweater"],
+];
+
+const digestOptions = [
+  ["good", "Food sits well before training"],
+  ["okay", "Sometimes fine, sometimes not"],
+  ["poor", "Often feel heavy / bloated"],
+];
+
+const breakfastHabitOptions = [
+  ["always", "I usually eat breakfast"],
+  ["sometimes", "Sometimes"],
+  ["rarely", "I usually skip it"],
+];
+
+const appetiteOptions = [
+  ["low", "Low appetite"],
+  ["normal", "Normal appetite"],
+  ["high", "High appetite"],
+];
+
+const budgetOptions = [
+  ["low", "Lower budget"],
+  ["medium", "Medium budget"],
+  ["high", "Flexible budget"],
+];
+
 const planTiers = [
   {
     key: "instant",
@@ -93,21 +123,26 @@ const planTiers = [
     price: "$4.99",
     badge: "Instant access",
     description:
-      "A personalized fueling system built around your sport, schedule, training load, and recovery needs.",
+      "A personalized daily fueling system built around your schedule, training load, recovery needs, and performance goal.",
     features: [
-      "Exact macro targets",
+      "Exact calorie + macro targets",
       "Hydration target in ounces",
-      "Pre, during, and post-workout strategy",
-      "Meet / game day fueling version",
-      "Recovery guidance and timing",
-      "Built from your actual schedule",
+      "Meal timing around your actual day",
+      "Pre, during, and post-workout system",
+      "Competition / meet day version",
+      "Recovery notes, grocery ideas, and save / download tools",
     ],
   },
 ];
 
+function clamp(num, min, max) {
+  return Math.max(min, Math.min(max, num));
+}
+
 function toMinutes(time) {
   if (!time) return null;
   const [h, m] = time.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
   return h * 60 + m;
 }
 
@@ -126,61 +161,106 @@ function niceSportLabel(sport) {
   return found ? found[1] : "Athlete";
 }
 
-function clamp(num, min, max) {
-  return Math.max(min, Math.min(max, num));
+function safeNumber(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+}
+
+function calcProgress(form) {
+  const importantFields = [
+    "email",
+    "sport",
+    "goal",
+    "ageRange",
+    "weight",
+    "intensity",
+    "duration",
+    "trainingType",
+    "wakeTime",
+    "schoolStart",
+    "practiceTime",
+    "bedTime",
+    "stomachSensitivity",
+    "currentHydration",
+    "competitionFrequency",
+    "eatingPattern",
+    "soreness",
+    "sweatRate",
+    "digestTolerance",
+    "breakfastHabit",
+    "appetite",
+  ];
+
+  const completed = importantFields.filter((key) => {
+    const value = form[key];
+    if (typeof value === "boolean") return true;
+    return String(value || "").trim() !== "";
+  }).length;
+
+  return Math.round((completed / importantFields.length) * 100);
 }
 
 function hasUserCustomized(form) {
-  return !(
-    form.sport === "swimming" &&
-    form.goal === "perform" &&
-    form.weight === "150" &&
-    form.intensity === "hard" &&
-    form.duration === "90" &&
-    form.practiceTime === "15:45" &&
-    form.trainingType === "mixed" &&
-    form.currentHydration === "okay"
-  );
+  const defaults = {
+    sport: "swimming",
+    goal: "perform",
+    weight: "150",
+    intensity: "hard",
+    duration: "90",
+    practiceTime: "15:45",
+    trainingType: "mixed",
+    currentHydration: "okay",
+    stomachSensitivity: "normal",
+  };
+
+  return Object.entries(defaults).some(([key, value]) => form[key] !== value);
 }
 
 function getCalories(form) {
-  const weight = Number(form.weight) || 150;
-  const duration = Number(form.duration) || 90;
+  const weight = safeNumber(form.weight, 150);
+  const duration = safeNumber(form.duration, 90);
 
-  let base = weight * 15;
+  let calories = weight * 15;
 
-  if (form.trainingType === "endurance") base += 150;
-  if (form.trainingType === "power") base += 75;
-  if (form.intensity === "hard") base += 150;
-  if (form.intensity === "very-hard") base += 300;
-  if (duration >= 90) base += 100;
-  if (duration >= 120) base += 150;
-  if (form.doubleDay) base += 300;
-  if (form.goal === "gain") base += 250;
-  if (form.goal === "lean") base -= 200;
+  if (form.sport === "swimming") calories += 120;
+  if (form.trainingType === "endurance") calories += 170;
+  if (form.trainingType === "power") calories += 90;
+  if (form.intensity === "hard") calories += 180;
+  if (form.intensity === "very-hard") calories += 340;
+  if (duration >= 90) calories += 110;
+  if (duration >= 120) calories += 150;
+  if (form.doubleDay) calories += 320;
+  if (form.competitionFrequency === "often") calories += 80;
+  if (form.goal === "gain") calories += 260;
+  if (form.goal === "lean") calories -= 180;
+  if (form.breakfastHabit === "rarely") calories -= 40;
+  if (form.soreness === "high") calories += 70;
 
-  return Math.round(base);
+  return Math.round(calories);
 }
 
 function getProteinGrams(form) {
-  const weight = Number(form.weight) || 150;
-  if (form.goal === "gain") return Math.round(weight * 0.95);
-  if (form.goal === "lean") return Math.round(weight * 0.9);
-  return Math.round(weight * 0.85);
+  const weight = safeNumber(form.weight, 150);
+  if (form.goal === "gain") return Math.round(weight * 0.98);
+  if (form.goal === "lean") return Math.round(weight * 0.92);
+  if (form.trainingType === "power") return Math.round(weight * 0.95);
+  return Math.round(weight * 0.86);
 }
 
 function getCarbGrams(form, calories, protein) {
-  const weight = Number(form.weight) || 150;
+  const weight = safeNumber(form.weight, 150);
   let carbs = Math.round(weight * 2.0);
 
-  if (form.trainingType === "endurance") carbs += 40;
+  if (form.sport === "swimming") carbs += 25;
+  if (form.trainingType === "endurance") carbs += 45;
   if (form.intensity === "hard") carbs += 25;
-  if (form.intensity === "very-hard") carbs += 50;
-  if (form.doubleDay) carbs += 40;
-  if (form.goal === "gain") carbs += 30;
-  if (form.goal === "lean") carbs -= 25;
+  if (form.intensity === "very-hard") carbs += 55;
+  if (form.doubleDay) carbs += 45;
+  if (form.goal === "gain") carbs += 25;
+  if (form.goal === "lean") carbs -= 20;
+  if (form.competitionFrequency === "often") carbs += 20;
 
-  const safeMinimum = Math.round(weight * 1.4);
+  const safeMinimum = Math.round(weight * 1.45);
   const roughMax = Math.round((calories - protein * 4 - 55 * 9) / 4);
 
   return clamp(carbs, safeMinimum, Math.max(roughMax, safeMinimum + 20));
@@ -192,56 +272,103 @@ function getFatGrams(calories, protein, carbs) {
 }
 
 function getHydrationOunces(form) {
-  const weight = Number(form.weight) || 150;
+  const weight = safeNumber(form.weight, 150);
   let ounces = Math.round(weight * 0.6);
 
   if (form.intensity === "hard") ounces += 12;
-  if (form.intensity === "very-hard") ounces += 20;
+  if (form.intensity === "very-hard") ounces += 18;
+  if (safeNumber(form.duration, 90) >= 90) ounces += 8;
+  if (safeNumber(form.duration, 90) >= 120) ounces += 8;
   if (form.doubleDay) ounces += 20;
-  if (Number(form.duration) >= 90) ounces += 8;
-  if (Number(form.duration) >= 120) ounces += 8;
-  if (form.currentHydration === "low") ounces += 8;
+  if (form.currentHydration === "low") ounces += 10;
+  if (form.sweatRate === "heavy") ounces += 14;
 
   return ounces;
 }
 
 function getDuringTrainingHydration(form) {
-  if (form.intensity === "very-hard" || Number(form.duration) >= 90 || form.doubleDay) {
-    return "16–28 oz per hour + electrolytes";
+  if (form.sweatRate === "heavy" || form.intensity === "very-hard" || form.doubleDay) {
+    return "18–30 oz per hour + electrolytes";
   }
-  if (form.intensity === "hard") {
-    return "14–22 oz per hour";
+  if (safeNumber(form.duration, 90) >= 90 || form.intensity === "hard") {
+    return "14–24 oz per hour";
   }
   return "12–18 oz per hour";
 }
 
-function getMacroSummary(form, calories, protein, carbs, fat) {
-  return {
-    calories: `${calories} kcal`,
-    protein: `${protein}g`,
-    carbs: `${carbs}g`,
-    fat: `${fat}g`,
-  };
+function getElectrolyteNote(form) {
+  if (form.sweatRate === "heavy") {
+    return "Use electrolytes consistently on long, hot, or high-sweat sessions.";
+  }
+  if (form.intensity === "very-hard" || form.doubleDay) {
+    return "Electrolytes are useful on your bigger sessions instead of relying on plain water only.";
+  }
+  return "Plain water is fine on easier sessions, but electrolytes help when sweat losses are higher.";
 }
 
 function getCarbFocus(form) {
   if (form.goal === "lean") {
-    return "Keep most carbs around training, recovery, and higher-output parts of the day.";
+    return "Keep the biggest carb blocks around training, recovery, and your highest-output parts of the day.";
   }
   if (form.goal === "gain") {
-    return "Push carbs hardest before training, after training, and again at dinner for recovery and growth.";
+    return "Push carbs hardest before training, after training, and again later in the day so growth and recovery stay supported.";
   }
   if (form.trainingType === "endurance" || form.sport === "swimming" || form.intensity === "very-hard") {
-    return "Distribute carbs steadily across the day so energy stays high before and during training.";
+    return "Spread carbs steadily across the day so you do not arrive at practice already low on energy.";
   }
   return "Center carbs around training and recovery while keeping earlier meals balanced.";
 }
 
-function preWorkoutFoods(stomachSensitivity) {
-  if (stomachSensitivity === "sensitive") {
-    return ["banana", "applesauce pouch", "toast + honey", "sports drink", "rice cakes"];
+function getGoalPhrase(goal) {
+  if (goal === "perform") return "performance";
+  if (goal === "gain") return "muscle gain";
+  if (goal === "lean") return "leaner performance";
+  return "maintenance";
+}
+
+function getPreviewSummary(form) {
+  if (!hasUserCustomized(form)) {
+    return "Built around your sport, schedule, training load, and performance goal.";
   }
-  return ["bagel + honey", "banana + granola bar", "pretzels + fruit", "rice cakes + jam", "toast + peanut butter"];
+
+  const sport = niceSportLabel(form.sport).toLowerCase();
+  const practiceTime = formatTime(toMinutes(form.practiceTime) ?? 945);
+
+  return `Built for a ${form.weight || "150"} lb ${sport} athlete focused on ${getGoalPhrase(
+    form.goal
+  )}, with ${form.intensity.replace("-", " ")} training around ${practiceTime}.`;
+}
+
+function getThisIsForYouItems(form) {
+  const sport = niceSportLabel(form.sport);
+  return [
+    `You train hard in ${sport} but still guess what to eat before training.`,
+    "You want something more useful than generic 'eat healthy' advice.",
+    "You need fuel timing that fits school, practice, lifting, and recovery.",
+    "You want better energy, less flat training, and a plan you can actually save and follow.",
+  ];
+}
+
+function preWorkoutFoods(form) {
+  if (form.stomachSensitivity === "sensitive" || form.digestTolerance === "poor") {
+    return [
+      "banana",
+      "applesauce pouch",
+      "toast + honey",
+      "sports drink",
+      "rice cakes",
+      "pretzels",
+    ];
+  }
+
+  return [
+    "bagel + honey",
+    "banana + granola bar",
+    "pretzels + fruit",
+    "rice cakes + jam",
+    "toast + peanut butter",
+    "oat bar + fruit",
+  ];
 }
 
 function postWorkoutFoods(goal) {
@@ -269,49 +396,63 @@ function postWorkoutFoods(goal) {
   ];
 }
 
-function breakfastFoods(goal) {
-  if (goal === "gain") return "eggs, toast, fruit, yogurt, and an added carb like oatmeal";
-  if (goal === "lean") return "eggs, fruit, toast, and Greek yogurt";
+function breakfastFoods(goal, appetite) {
+  if (goal === "gain" || appetite === "high") {
+    return "eggs, toast, fruit, yogurt, and an added carb like oatmeal";
+  }
+  if (goal === "lean") {
+    return "eggs, fruit, toast, and Greek yogurt";
+  }
   return "eggs, toast, fruit, and yogurt or oatmeal";
 }
 
 function lunchFoods(goal) {
-  if (goal === "gain") return "rice or pasta, protein, fruit, and an added carb like bread or potatoes";
-  if (goal === "lean") return "rice or potatoes, lean protein, fruit, and vegetables";
+  if (goal === "gain") {
+    return "rice or pasta, protein, fruit, and an added carb like bread or potatoes";
+  }
+  if (goal === "lean") {
+    return "rice or potatoes, lean protein, fruit, and vegetables";
+  }
   return "rice, potatoes, or pasta with protein and fruit";
 }
 
-function getGoalPhrase(goal) {
-  if (goal === "perform") return "performance";
-  if (goal === "gain") return "muscle gain";
-  if (goal === "lean") return "leaner performance";
-  return "maintenance";
+function getPlanScore(form) {
+  let score = 86;
+  if (form.eatingPattern === "random") score -= 6;
+  if (form.currentHydration === "low") score -= 4;
+  if (form.breakfastHabit === "rarely") score -= 4;
+  if (form.soreness === "high") score -= 4;
+  if (form.doubleDay) score -= 3;
+  if (form.goal === "gain" && form.appetite === "low") score -= 2;
+  return clamp(score, 72, 95);
 }
 
-function getPreviewSummary(form) {
-  if (!hasUserCustomized(form)) {
-    return "Built around your sport, training schedule, and performance goal.";
+function getPriorityBullets(form) {
+  const bullets = [];
+
+  if (form.breakfastHabit === "rarely") {
+    bullets.push("Your first win is eating earlier so you stop trying to catch up late in the day.");
+  }
+  if (form.currentHydration === "low") {
+    bullets.push("Your hydration needs to become automatic, not something you remember halfway through training.");
+  }
+  if (form.stomachSensitivity === "sensitive" || form.digestTolerance === "poor") {
+    bullets.push("Your pre-workout choices should stay lighter and easier to digest so you can fuel without feeling heavy.");
+  }
+  if (form.goal === "gain") {
+    bullets.push("You need more total intake and more consistent recovery fuel, not just a bigger dinner.");
+  }
+  if (form.goal === "lean") {
+    bullets.push("You still need strong training fuel. The goal is smarter timing, not flat low-energy days.");
+  }
+  if (form.doubleDay || form.intensity === "very-hard") {
+    bullets.push("Your workload is high enough that a normal school-day eating pattern will usually leave you underfueled.");
+  }
+  if (!bullets.length) {
+    bullets.push("Your biggest edge is turning decent habits into more consistent timing, hydration, and recovery.");
   }
 
-  const sport = niceSportLabel(form.sport);
-  const sportText =
-    sport === "Track & Field" ? "track athlete" : sport.toLowerCase();
-
-  return `Built for a ${form.weight || "150"} lb ${sportText} focused on ${getGoalPhrase(
-    form.goal
-  )}, with ${form.intensity.replace("-", " ")} training and practice at ${formatTime(
-    toMinutes(form.practiceTime) ?? 945
-  )}.`;
-}
-
-function getThisIsForYouItems(form) {
-  const sport = niceSportLabel(form.sport);
-  return [
-    `You train hard in ${sport} but still guess what to eat before practice.`,
-    "You feel low-energy, flat, or underfueled during training.",
-    "You want better performance instead of just “eating healthy.”",
-    "You need a schedule that fits school, lifting, practice, and recovery.",
-  ];
+  return bullets.slice(0, 4);
 }
 
 function buildPlan(form) {
@@ -319,6 +460,7 @@ function buildPlan(form) {
   const school = toMinutes(form.schoolStart) ?? 480;
   const practice = toMinutes(form.practiceTime) ?? 945;
   const bed = toMinutes(form.bedTime) ?? 1350;
+  const duration = safeNumber(form.duration, 90);
 
   const calories = getCalories(form);
   const protein = getProteinGrams(form);
@@ -326,8 +468,9 @@ function buildPlan(form) {
   const fat = getFatGrams(calories, protein, carbs);
   const hydrationOz = getHydrationOunces(form);
   const duringTraining = getDuringTrainingHydration(form);
+  const sweatNote = getElectrolyteNote(form);
 
-  const preFoods = preWorkoutFoods(form.stomachSensitivity);
+  const preFoods = preWorkoutFoods(form);
   const recoveryFoods = postWorkoutFoods(form.goal);
 
   const athleteType = niceSportLabel(form.sport);
@@ -346,27 +489,42 @@ function buildPlan(form) {
         ? "This system keeps protein high, places carbs where they help performance most, and avoids the classic mistake of underfueling before training."
         : "This system spreads your fuel more intentionally across the day so you can show up to training with better energy, recover faster, and avoid late-day crashes.";
 
-  const meal1Time = formatTime(wake + 30);
-  const meal2Time = formatTime(Math.max(school - 30, wake + 150));
-  const meal3Time = formatTime(practice - 180);
-  const meal4Time = formatTime(practice - 60);
-  const meal5Time = formatTime(practice + 20);
-  const meal6Time = formatTime(Math.min(bed - 90, practice + 150));
+  const breakfastTime = formatTime(wake + 25);
+  const snack1Time = formatTime(Math.max(school - 35, wake + 150));
+  const lunchTime = formatTime(practice - 190);
+  const topUpTime = formatTime(practice - 60);
+  const duringTime = formatTime(practice);
+  const recoveryTime = formatTime(practice + duration + 15);
+  const dinnerTime = formatTime(Math.min(bed - 120, practice + duration + 140));
+  const preBedTime = formatTime(Math.min(bed - 45, dinnerTime ? toMinutes(form.bedTime) - 45 : 1305));
+
+  const breakfastCarbs = Math.round(carbs * 0.2);
+  const breakfastProtein = Math.round(protein * 0.22);
+  const snackCarbs = Math.round(carbs * 0.1);
+  const snackProtein = Math.round(protein * 0.1);
+  const lunchCarbs = Math.round(carbs * 0.24);
+  const lunchProtein = Math.round(protein * 0.22);
+  const topUpCarbs = Math.round(carbs * 0.12);
+  const recoveryCarbs = Math.round(carbs * 0.18);
+  const recoveryProtein = Math.round(protein * 0.22);
+  const dinnerCarbs = Math.round(carbs * 0.12);
+  const dinnerProtein = Math.round(protein * 0.16);
+  const preBedProtein = Math.round(protein * 0.08);
 
   const items = [
     {
-      time: meal1Time,
-      title: "Breakfast — Fuel Foundation",
-      desc: `Start the day with ${breakfastFoods(form.goal)} so you do not spend the first half of the day trying to catch up.`,
-      macros: `Target: ~${Math.round(carbs * 0.2)}g carbs + ${Math.round(protein * 0.22)}g protein`,
+      time: breakfastTime,
+      title: "Breakfast — Start Fueled",
+      desc: `Start the day with ${breakfastFoods(form.goal, form.appetite)} so you are not behind before school or training even starts.`,
+      macros: `Target: ~${breakfastCarbs}g carbs + ${breakfastProtein}g protein`,
       hydration: "Hydration: 16–20 oz water in the morning",
       examples: ["eggs", "toast", "fruit", "yogurt or oatmeal"],
     },
     {
-      time: meal2Time,
+      time: snack1Time,
       title: "Mid-Morning / School Fuel",
-      desc: "This keeps your energy stable so you do not enter lunch or practice already underfueled.",
-      macros: `Target: ~${Math.round(carbs * 0.1)}g carbs + ${Math.round(protein * 0.1)}g protein`,
+      desc: "This keeps your energy stable and prevents the classic crash before lunch or training.",
+      macros: `Target: ~${snackCarbs}g carbs + ${snackProtein}g protein`,
       hydration: "Hydration: 10–16 oz",
       examples:
         form.stomachSensitivity === "sensitive"
@@ -374,47 +532,50 @@ function buildPlan(form) {
           : ["granola bar", "fruit", "pretzels", "Greek yogurt"],
     },
     {
-      time: meal3Time,
+      time: lunchTime,
       title: "Main Pre-Training Meal",
-      desc: `Build this around ${lunchFoods(form.goal)} so you go into training with real fuel instead of relying on one snack.`,
-      macros: `Target: ~${Math.round(carbs * 0.26)}g carbs + ${Math.round(protein * 0.22)}g protein`,
+      desc: `Build this around ${lunchFoods(form.goal)} so practice is powered by a real meal instead of a last-second snack.`,
+      macros: `Target: ~${lunchCarbs}g carbs + ${lunchProtein}g protein`,
       hydration: "Hydration: 16–24 oz before training window",
       examples: ["rice / pasta / potatoes", "chicken / turkey / beef", "fruit", "water"],
     },
     {
-      time: meal4Time,
+      time: topUpTime,
       title: "Pre-Workout Top-Up",
       desc: "Use a lighter carb-focused snack 45–75 minutes before training to sharpen energy without feeling heavy.",
-      macros: `Target: ~${Math.round(carbs * 0.12)}g carbs`,
+      macros: `Target: ~${topUpCarbs}g carbs`,
       hydration: "Hydration: 8–12 oz",
       examples: preFoods,
     },
     {
-      time: formatTime(practice),
+      time: duringTime,
       title: "During Training Strategy",
-      desc: "Do not wait until you feel flat. Your hydration and electrolytes should already be working for you.",
-      macros: form.doubleDay || form.intensity === "very-hard" ? "Add carbs if needed during long or high-output sessions" : "Hydration-first approach",
+      desc: "Do not wait until you feel flat. Your hydration should already be working for you.",
+      macros:
+        form.doubleDay || form.intensity === "very-hard" || duration >= 100
+          ? "Add carbs during long or very hard sessions if energy drops"
+          : "Hydration-first approach",
       hydration: `During training: ${duringTraining}`,
       examples:
-        form.intensity === "very-hard" || form.doubleDay
+        form.intensity === "very-hard" || form.doubleDay || duration >= 100
           ? ["water bottle", "electrolytes", "sports drink if needed"]
           : ["water bottle", "electrolytes if you sweat heavily"],
     },
     {
-      time: meal5Time,
+      time: recoveryTime,
       title: "Post-Workout Recovery Window",
-      desc: "This is where you replace what you used, start muscle repair, and avoid going into tomorrow depleted.",
-      macros: `Target: ~${Math.round(carbs * 0.18)}g carbs + ${Math.round(protein * 0.22)}g protein`,
+      desc: "This is where you replace what you used, start muscle repair, and avoid dragging tomorrow's session down.",
+      macros: `Target: ~${recoveryCarbs}g carbs + ${recoveryProtein}g protein`,
       hydration: "Hydration: 16–24 oz + sodium if sweaty session",
       examples: recoveryFoods,
     },
     {
-      time: meal6Time,
+      time: dinnerTime,
       title: "Dinner — Recovery + Reset",
       desc: form.doubleDay
         ? "Go bigger here. Heavy days need carbs, protein, fluids, and enough total intake to actually recover."
         : "Finish with a full balanced meal that supports recovery, sleep, and tomorrow’s training.",
-      macros: `Target: ~${Math.round(carbs * 0.14)}g carbs + ${Math.round(protein * 0.18)}g protein`,
+      macros: `Target: ~${dinnerCarbs}g carbs + ${dinnerProtein}g protein`,
       hydration: "Hydration: Finish the rest of your daily target",
       examples: ["rice / potatoes / pasta", "protein source", "vegetables", "fruit or dairy"],
     },
@@ -422,20 +583,51 @@ function buildPlan(form) {
 
   if (form.doubleDay) {
     items.splice(3, 0, {
-      time: formatTime(practice - 270),
+      time: formatTime(practice - 230),
       title: "Extra Fuel Block",
       desc: "Because your workload is higher than normal, you need an added fuel block instead of pretending a standard day is enough.",
-      macros: `Target: ~${Math.round(carbs * 0.1)}g carbs + ${Math.round(protein * 0.08)}g protein`,
+      macros: `Target: ~${Math.round(carbs * 0.08)}g carbs + ${Math.round(protein * 0.08)}g protein`,
       hydration: "Hydration: 10–16 oz",
       examples: ["bagel", "trail mix", "fruit", "sports drink", "yogurt"],
     });
   }
 
+  if (form.goal === "gain" || form.soreness === "high") {
+    items.push({
+      time: preBedTime,
+      title: "Pre-Bed Recovery Add-On",
+      desc: "A light protein-focused add-on can help you finish the day without ending up short on recovery.",
+      macros: `Target: ~${preBedProtein}g protein`,
+      hydration: "Hydration: Small amount of water only if needed",
+      examples: ["Greek yogurt", "milk", "protein shake", "cottage cheese", "toast + yogurt"],
+    });
+  }
+
+  const groceryList = [
+    "bagels / bread / toast",
+    "rice / pasta / potatoes / oats",
+    "fruit like bananas, berries, apples, oranges",
+    "Greek yogurt / milk / chocolate milk",
+    "chicken / turkey / eggs / beef",
+    "pretzels / granola bars / crackers / rice cakes",
+    "electrolytes or sports drink for harder sessions",
+  ];
+
+  const convenienceList = [
+    "banana",
+    "applesauce pouch",
+    "granola bar",
+    "Greek yogurt cup",
+    "pretzels",
+    "bagel",
+    "sports drink",
+  ];
+
   const meetGameDay = {
     nightBefore:
       "Eat a normal solid dinner with carbs, protein, fluids, and sodium. Do not try to 'eat perfect' by underfueling.",
     preEvent:
-      form.stomachSensitivity === "sensitive"
+      form.stomachSensitivity === "sensitive" || form.digestTolerance === "poor"
         ? "Use easier carbs like toast, banana, applesauce, rice, or a sports drink."
         : "Use a carb-based meal 2–4 hours before with lighter protein and lower-fat foods.",
     during:
@@ -444,10 +636,17 @@ function buildPlan(form) {
       "Recover quickly with fluids, carbs, and protein so the rest of the day or next day does not fall apart.",
   };
 
+  const commonMistakes = [
+    "Going too long without eating earlier in the day",
+    "Trying to fix underfueling with one snack right before practice",
+    "Using water only when sweat losses are high",
+    "Waiting too long after training to start recovery",
+  ];
+
   const recoveryTips = [
     `Protein target: ${protein}g/day split across the day instead of all at night.`,
     `Hydration target: ${hydrationOz}–${hydrationOz + 16} oz/day.`,
-    `Sleep matters more when soreness is ${form.soreness}. Protect your last meal and hydration.`,
+    `Electrolyte note: ${sweatNote}`,
     form.caffeine === "daily"
       ? "Be careful not to rely on caffeine to cover up underfueling."
       : "Do not use caffeine as your whole energy strategy.",
@@ -462,35 +661,319 @@ function buildPlan(form) {
     carbFocus: getCarbFocus(form),
     hydrationTarget: `${hydrationOz}–${hydrationOz + 16} oz/day`,
     duringTraining,
-    macros: getMacroSummary(form, calories, protein, carbs, fat),
+    macros: {
+      calories: `${calories} kcal`,
+      protein: `${protein}g`,
+      carbs: `${carbs}g`,
+      fat: `${fat}g`,
+    },
     items,
     meetGameDay,
     recoveryTips,
+    commonMistakes,
+    groceryList,
+    convenienceList,
     thisIsForYou: getThisIsForYouItems(form),
+    priorityBullets: getPriorityBullets(form),
+    planScore: getPlanScore(form),
+    electrolyteNote: sweatNote,
   };
 }
 
-function Field({ label, children }) {
+function downloadPlanAsHtml(plan, form) {
+  const html = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <title>PeakFuel Plan</title>
+      <style>
+        body {
+          font-family: Inter, Arial, sans-serif;
+          margin: 0;
+          padding: 32px;
+          color: #0f172a;
+          background: #ffffff;
+          line-height: 1.6;
+        }
+        .wrap {
+          max-width: 900px;
+          margin: 0 auto;
+        }
+        .top {
+          padding: 24px;
+          border-radius: 20px;
+          background: linear-gradient(135deg, #0ea5e9, #22d3ee 50%, #111827);
+          color: white;
+        }
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          margin: 20px 0;
+        }
+        .card, .section {
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+          padding: 16px;
+          background: white;
+        }
+        .section { margin-top: 16px; }
+        .small { color: #64748b; font-size: 14px; }
+        h1, h2, h3, p { margin-top: 0; }
+        ul { margin: 8px 0 0; }
+        @media print {
+          body { padding: 0; }
+          .top { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="top">
+          <div>PeakFuel</div>
+          <h1>${plan.title}</h1>
+          <p>${plan.profileSummary}</p>
+        </div>
+
+        <div class="grid">
+          <div class="card"><div class="small">Calories</div><strong>${plan.macros.calories}</strong></div>
+          <div class="card"><div class="small">Protein</div><strong>${plan.macros.protein}</strong></div>
+          <div class="card"><div class="small">Carbs</div><strong>${plan.macros.carbs}</strong></div>
+          <div class="card"><div class="small">Fat</div><strong>${plan.macros.fat}</strong></div>
+        </div>
+
+        <div class="section">
+          <h2>Hydration</h2>
+          <p><strong>Daily target:</strong> ${plan.hydrationTarget}</p>
+          <p><strong>During training:</strong> ${plan.duringTraining}</p>
+          <p>${plan.electrolyteNote}</p>
+        </div>
+
+        <div class="section">
+          <h2>Priority focus</h2>
+          <ul>${plan.priorityBullets.map((item) => `<li>${item}</li>`).join("")}</ul>
+        </div>
+
+        <div class="section">
+          <h2>Daily schedule</h2>
+          ${plan.items
+            .map(
+              (item) => `
+            <div style="border-top:1px solid #e5e7eb; padding-top:14px; margin-top:14px;">
+              <h3>${item.time} — ${item.title}</h3>
+              <p>${item.desc}</p>
+              <p><strong>${item.macros}</strong></p>
+              <p>${item.hydration}</p>
+              <ul>${item.examples.map((example) => `<li>${example}</li>`).join("")}</ul>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+
+        <div class="section">
+          <h2>Competition / meet day</h2>
+          <p><strong>Night before:</strong> ${plan.meetGameDay.nightBefore}</p>
+          <p><strong>Pre-event:</strong> ${plan.meetGameDay.preEvent}</p>
+          <p><strong>During:</strong> ${plan.meetGameDay.during}</p>
+          <p><strong>After:</strong> ${plan.meetGameDay.after}</p>
+        </div>
+
+        <div class="section">
+          <h2>Recovery system</h2>
+          <ul>${plan.recoveryTips.map((item) => `<li>${item}</li>`).join("")}</ul>
+        </div>
+
+        <div class="section">
+          <h2>Quick grocery list</h2>
+          <ul>${plan.groceryList.map((item) => `<li>${item}</li>`).join("")}</ul>
+        </div>
+
+        <div class="section">
+          <h2>Fast grab-and-go options</h2>
+          <ul>${plan.convenienceList.map((item) => `<li>${item}</li>`).join("")}</ul>
+        </div>
+
+        <div class="section">
+          <h2>Common mistakes to avoid</h2>
+          <ul>${plan.commonMistakes.map((item) => `<li>${item}</li>`).join("")}</ul>
+        </div>
+
+        <div class="section">
+          <div class="small">
+            Educational fueling guidance only. Adjust for allergies, preferences, and any advice from a qualified professional.
+          </div>
+        </div>
+      </div>
+    </body>
+  </html>
+  `;
+
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `PeakFuel-Plan-${(form.sport || "athlete").toLowerCase()}.html`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadPlanAsText(plan, form) {
+  const text = `
+PEAKFUEL PLAN
+${plan.title}
+
+PROFILE
+${plan.profileSummary}
+
+MACROS
+Calories: ${plan.macros.calories}
+Protein: ${plan.macros.protein}
+Carbs: ${plan.macros.carbs}
+Fat: ${plan.macros.fat}
+
+HYDRATION
+Daily target: ${plan.hydrationTarget}
+During training: ${plan.duringTraining}
+Electrolytes: ${plan.electrolyteNote}
+
+PRIORITY FOCUS
+${plan.priorityBullets.map((x, i) => `${i + 1}. ${x}`).join("\n")}
+
+DAILY SCHEDULE
+${plan.items
+  .map(
+    (item) => `
+${item.time} — ${item.title}
+${item.desc}
+${item.macros}
+${item.hydration}
+Examples: ${item.examples.join(", ")}
+`
+  )
+  .join("\n")}
+
+COMPETITION / MEET DAY
+Night before: ${plan.meetGameDay.nightBefore}
+Pre-event: ${plan.meetGameDay.preEvent}
+During: ${plan.meetGameDay.during}
+After: ${plan.meetGameDay.after}
+
+RECOVERY SYSTEM
+${plan.recoveryTips.map((x, i) => `${i + 1}. ${x}`).join("\n")}
+
+GROCERY LIST
+${plan.groceryList.map((x) => `- ${x}`).join("\n")}
+
+GRAB-AND-GO
+${plan.convenienceList.map((x) => `- ${x}`).join("\n")}
+
+COMMON MISTAKES
+${plan.commonMistakes.map((x) => `- ${x}`).join("\n")}
+`;
+
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `PeakFuel-Plan-${(form.sport || "athlete").toLowerCase()}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function printPlan(plan) {
+  const printWindow = window.open("", "_blank", "width=900,height=1200");
+  if (!printWindow) return;
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${plan.title}</title>
+        <style>
+          body {
+            font-family: Inter, Arial, sans-serif;
+            padding: 32px;
+            color: #111827;
+            line-height: 1.6;
+          }
+          h1, h2, h3 { margin-bottom: 8px; }
+          .box {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 14px;
+          }
+          .top {
+            background: #f8fafc;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="box top">
+          <h1>${plan.title}</h1>
+          <p>${plan.profileSummary}</p>
+        </div>
+        <div class="grid">
+          <div class="box"><strong>Calories:</strong> ${plan.macros.calories}</div>
+          <div class="box"><strong>Protein:</strong> ${plan.macros.protein}</div>
+          <div class="box"><strong>Carbs:</strong> ${plan.macros.carbs}</div>
+          <div class="box"><strong>Fat:</strong> ${plan.macros.fat}</div>
+        </div>
+        <div class="box">
+          <h2>Hydration</h2>
+          <p><strong>Daily target:</strong> ${plan.hydrationTarget}</p>
+          <p><strong>During training:</strong> ${plan.duringTraining}</p>
+        </div>
+        <div class="box">
+          <h2>Daily schedule</h2>
+          ${plan.items
+            .map(
+              (item) => `
+            <h3>${item.time} — ${item.title}</h3>
+            <p>${item.desc}</p>
+            <p>${item.macros}</p>
+            <p>${item.hydration}</p>
+            <p><strong>Examples:</strong> ${item.examples.join(", ")}</p>
+          `
+            )
+            .join("")}
+        </div>
+      </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+function Field({ label, hint, children }) {
   return (
-    <div>
-      <label style={styles.label}>{label}</label>
+    <div className="pf-field">
+      <label className="pf-label">{label}</label>
       {children}
+      {hint ? <div className="pf-hint">{hint}</div> : null}
     </div>
   );
 }
 
 function SectionHeading({ eyebrow, title, text, center = false }) {
   return (
-    <div
-      style={{
-        maxWidth: 780,
-        margin: center ? "0 auto" : 0,
-        textAlign: center ? "center" : "left",
-      }}
-    >
-      <div style={styles.eyebrow}>{eyebrow}</div>
-      <h2 style={styles.sectionTitle}>{title}</h2>
-      {text ? <p style={styles.sectionText}>{text}</p> : null}
+    <div className={center ? "pf-section-heading center" : "pf-section-heading"}>
+      <div className="pf-eyebrow">{eyebrow}</div>
+      <h2 className="pf-section-title">{title}</h2>
+      {text ? <p className="pf-section-text">{text}</p> : null}
     </div>
   );
 }
@@ -502,115 +985,128 @@ function LandingPage({
   startCheckout,
   savePreview,
   leadMessage,
+  clearSaved,
 }) {
   const customized = hasUserCustomized(form);
+  const progress = calcProgress(form);
 
   return (
     <>
-      <section style={styles.heroWrap}>
-        <div style={styles.gridBg} />
-        <div style={styles.container}>
-          <header style={styles.header}>
-            <div style={styles.logoWrap}>
-              <div style={styles.logo}>PF</div>
+      <section className="pf-hero">
+        <div className="pf-grid-bg" />
+        <div className="pf-container">
+          <header className="pf-header">
+            <div className="pf-logo-wrap">
+              <div className="pf-logo">PF</div>
               <div>
-                <div style={styles.logoTitle}>PeakFuel</div>
-                <div style={styles.logoSub}>Daily fuel system for athletes</div>
+                <div className="pf-logo-title">PeakFuel</div>
+                <div className="pf-logo-sub">Daily fuel system for athletes</div>
               </div>
             </div>
 
-            <nav style={styles.nav}>
-              <a href="#builder" style={styles.navLink}>Builder</a>
-              <a href="#preview" style={styles.navLink}>Preview</a>
-              <a href="#pricing" style={styles.navLink}>Pricing</a>
+            <nav className="pf-nav">
+              <a href="#builder" className="pf-nav-link">Builder</a>
+              <a href="#preview" className="pf-nav-link">Preview</a>
+              <a href="#pricing" className="pf-nav-link">Pricing</a>
             </nav>
 
-            <a href="#builder" style={styles.headerCta}>Build My System</a>
+            <a href="#builder" className="pf-header-cta">Build My System</a>
           </header>
 
-          <div style={styles.heroGrid}>
-            <div style={styles.heroLeft}>
-              <div style={styles.badge}>Built around real training schedules</div>
+          <div className="pf-hero-grid">
+            <div className="pf-hero-left">
+              <div className="pf-badge">Built around real training schedules</div>
 
-              <h1 style={styles.heroTitle}>
+              <h1 className="pf-hero-title">
                 Stop guessing what to eat. Fuel like a real athlete.
               </h1>
 
-              <p style={styles.heroText}>
-                PeakFuel builds your exact daily eating schedule, macro targets,
-                hydration, and recovery strategy based on your sport, training
-                time, workload, and goals.
+              <p className="pf-hero-text">
+                PeakFuel builds your actual daily fueling structure based on your
+                sport, schedule, practice time, training load, recovery needs,
+                and performance goal.
               </p>
 
-              <div style={styles.heroButtons}>
-                <a href="#builder" style={styles.primaryBtn}>Build Your Plan</a>
-                <a href="#preview" style={styles.secondaryBtn}>See Live Preview</a>
+              <div className="pf-hero-buttons">
+                <a href="#builder" className="pf-primary-btn">Build Your Plan</a>
+                <a href="#preview" className="pf-secondary-btn">See Live Preview</a>
               </div>
 
-              <div style={styles.heroTrustRow}>
-                <div style={styles.heroTrustPill}>Exact daily structure</div>
-                <div style={styles.heroTrustPill}>Built from your schedule</div>
-                <div style={styles.heroTrustPill}>One-time purchase</div>
+              <div className="pf-hero-trust-row">
+                <div className="pf-pill">Exact daily structure</div>
+                <div className="pf-pill">Built from your schedule</div>
+                <div className="pf-pill">Save + download included</div>
+              </div>
+
+              <div className="pf-mini-proof">
+                <div className="pf-mini-proof-item">
+                  <strong>{progress}%</strong>
+                  <span>Builder completion</span>
+                </div>
+                <div className="pf-mini-proof-item">
+                  <strong>{plan.planScore}/100</strong>
+                  <span>Current fueling score</span>
+                </div>
               </div>
             </div>
 
-            <div style={styles.previewShell}>
-              <div style={styles.previewTopCard}>
-                <div style={styles.previewTopMeta}>Live preview</div>
-                <div style={styles.previewTitle}>{plan.previewTitle}</div>
-                <div style={styles.previewSummary}>{plan.previewSummary}</div>
+            <div className="pf-preview-shell">
+              <div className="pf-preview-top">
+                <div className="pf-preview-meta">Live preview</div>
+                <div className="pf-preview-title">{plan.previewTitle}</div>
+                <div className="pf-preview-summary">{plan.previewSummary}</div>
               </div>
 
-              <div id="preview" style={styles.previewListWrap}>
-                <div style={styles.previewMetricsGrid}>
-                  <div style={styles.metricCard}>
-                    <div style={styles.metricLabel}>Protein</div>
-                    <div style={styles.metricValue}>
+              <div id="preview" className="pf-preview-wrap">
+                <div className="pf-metrics-grid">
+                  <div className="pf-metric-card">
+                    <div className="pf-metric-label">Protein</div>
+                    <div className="pf-metric-value">
                       {customized ? plan.macros.protein : "Personalized"}
                     </div>
                   </div>
-                  <div style={styles.metricCard}>
-                    <div style={styles.metricLabel}>Carbs</div>
-                    <div style={styles.metricValue}>
+                  <div className="pf-metric-card">
+                    <div className="pf-metric-label">Carbs</div>
+                    <div className="pf-metric-value">
                       {customized ? plan.macros.carbs : "Calculated"}
                     </div>
                   </div>
-                  <div style={styles.metricCard}>
-                    <div style={styles.metricLabel}>Hydration</div>
-                    <div style={styles.metricValue}>
+                  <div className="pf-metric-card">
+                    <div className="pf-metric-label">Hydration</div>
+                    <div className="pf-metric-value">
                       {customized ? plan.hydrationTarget : "Built from inputs"}
                     </div>
                   </div>
                 </div>
 
                 {plan.items.slice(0, 3).map((item) => (
-                  <div key={item.time + item.title} style={styles.previewItem}>
-                    <div style={styles.timeBox}>{item.time}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={styles.itemTitle}>{item.title}</div>
-                      <div style={styles.itemDesc}>{item.desc}</div>
-                      <div style={styles.itemSubMeta}>{item.macros}</div>
+                  <div key={item.time + item.title} className="pf-preview-item">
+                    <div className="pf-time-box">{item.time}</div>
+                    <div className="pf-item-content">
+                      <div className="pf-item-title">{item.title}</div>
+                      <div className="pf-item-desc">{item.desc}</div>
+                      <div className="pf-item-meta">{item.macros}</div>
                     </div>
                   </div>
                 ))}
 
-                <div style={styles.lockedBlock}>
-                  <div style={styles.lockedBadge}>Full system preview</div>
-                  <div style={styles.lockedTitle}>Unlock your full fuel system</div>
-                  <div style={styles.lockedText}>
+                <div className="pf-locked-block">
+                  <div className="pf-locked-badge">Full system preview</div>
+                  <div className="pf-locked-title">Unlock your full fuel system</div>
+                  <div className="pf-locked-text">
                     Get your full day structure, exact macros, hydration target,
-                    pre / during / post-workout strategy, meet or game day
-                    version, and recovery guidance built from your inputs.
+                    performance notes, competition version, recovery system,
+                    grocery ideas, and save / download tools.
                   </div>
 
-                  <div style={styles.lockedFeatureGrid}>
-                    <div style={styles.lockedFeature}>✓ Exact calories + macros</div>
-                    <div style={styles.lockedFeature}>✓ Hydration in ounces</div>
-                    <div style={styles.lockedFeature}>✓ Meet / game day version</div>
-                    <div style={styles.lockedFeature}>✓ Recovery system</div>
+                  <div className="pf-locked-feature-grid">
+                    <div className="pf-locked-feature">✓ Exact calories + macros</div>
+                    <div className="pf-locked-feature">✓ Hydration in ounces</div>
+                    <div className="pf-locked-feature">✓ Meet / game day version</div>
+                    <div className="pf-locked-feature">✓ Save, print, download</div>
                   </div>
 
-                  <button onClick={startCheckout} style={styles.primaryDarkButton}>
+                  <button onClick={startCheckout} className="pf-dark-btn">
                     Get Instant Access — $4.99
                   </button>
                 </div>
@@ -620,9 +1116,9 @@ function LandingPage({
         </div>
       </section>
 
-      <section style={styles.lightSection}>
-        <div style={styles.container}>
-          <div style={styles.forYouSection}>
+      <section className="pf-light-section">
+        <div className="pf-container">
+          <div className="pf-for-you-section">
             <div>
               <SectionHeading
                 eyebrow="This is for you"
@@ -631,10 +1127,10 @@ function LandingPage({
               />
             </div>
 
-            <div style={styles.forYouCard}>
+            <div className="pf-for-you-card">
               {plan.thisIsForYou.map((item) => (
-                <div key={item} style={styles.forYouRow}>
-                  <span style={styles.forYouCheck}>✓</span>
+                <div key={item} className="pf-for-you-row">
+                  <span className="pf-check">✓</span>
                   <span>{item}</span>
                 </div>
               ))}
@@ -643,40 +1139,50 @@ function LandingPage({
         </div>
       </section>
 
-      <section style={styles.containerSection}>
-        <div style={styles.trustStrip}>
-          <div style={styles.trustStripItem}>
-            <div style={styles.trustStripTitle}>Built for real schedules</div>
-            <div style={styles.trustStripText}>School, lifting, practice, dinner, recovery.</div>
+      <section className="pf-container-section">
+        <div className="pf-trust-strip">
+          <div className="pf-trust-item">
+            <div className="pf-trust-title">Built for real schedules</div>
+            <div className="pf-trust-text">School, lifting, practice, dinner, recovery.</div>
           </div>
-          <div style={styles.trustStripItem}>
-            <div style={styles.trustStripTitle}>Designed for performance</div>
-            <div style={styles.trustStripText}>Not generic meal tips. A structured fuel system.</div>
+          <div className="pf-trust-item">
+            <div className="pf-trust-title">Made to feel specific</div>
+            <div className="pf-trust-text">Not generic tips. A structured system.</div>
           </div>
-          <div style={styles.trustStripItem}>
-            <div style={styles.trustStripTitle}>Made for athletes</div>
-            <div style={styles.trustStripText}>Useful for high school, club, and serious training.</div>
+          <div className="pf-trust-item">
+            <div className="pf-trust-title">Worth keeping</div>
+            <div className="pf-trust-text">Save it, print it, or download it.</div>
           </div>
         </div>
       </section>
 
-      <section id="builder" style={styles.containerSectionTight}>
-        <div style={styles.twoCol}>
+      <section id="builder" className="pf-container-section-tight">
+        <div className="pf-two-col">
           <div>
             <SectionHeading
               eyebrow="Builder"
               title="Build your personalized fuel system"
-              text="Add your sport, schedule, training load, and recovery details so your plan feels specific, useful, and worth buying."
+              text="Add your schedule, training details, recovery needs, and preferences so your plan feels specific, useful, and worth paying for."
             />
 
-            <div style={styles.formCard}>
-              <div style={styles.formGrid}>
-                <Field label="Email">
+            <div className="pf-form-card">
+              <div className="pf-progress-row">
+                <div className="pf-progress-top">
+                  <span>Builder progress</span>
+                  <strong>{progress}%</strong>
+                </div>
+                <div className="pf-progress-bar">
+                  <div className="pf-progress-fill" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+
+              <div className="pf-form-grid">
+                <Field label="Email" hint="Used to save your plan to this device before checkout">
                   <input
                     value={form.email}
                     onChange={(e) => updateField("email", e.target.value)}
                     placeholder="you@example.com"
-                    style={styles.input}
+                    className="pf-input"
                   />
                 </Field>
 
@@ -684,7 +1190,7 @@ function LandingPage({
                   <select
                     value={form.sport}
                     onChange={(e) => updateField("sport", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {sports.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -696,7 +1202,7 @@ function LandingPage({
                   <select
                     value={form.goal}
                     onChange={(e) => updateField("goal", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {goals.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -708,7 +1214,7 @@ function LandingPage({
                   <select
                     value={form.ageRange}
                     onChange={(e) => updateField("ageRange", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {ageRanges.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -721,7 +1227,8 @@ function LandingPage({
                     value={form.weight}
                     onChange={(e) => updateField("weight", e.target.value)}
                     placeholder="150"
-                    style={styles.input}
+                    className="pf-input"
+                    inputMode="numeric"
                   />
                 </Field>
 
@@ -730,7 +1237,7 @@ function LandingPage({
                     value={form.height}
                     onChange={(e) => updateField("height", e.target.value)}
                     placeholder={`5'11"`}
-                    style={styles.input}
+                    className="pf-input"
                   />
                 </Field>
 
@@ -738,7 +1245,7 @@ function LandingPage({
                   <select
                     value={form.intensity}
                     onChange={(e) => updateField("intensity", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {intensityLevels.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -751,7 +1258,8 @@ function LandingPage({
                     value={form.duration}
                     onChange={(e) => updateField("duration", e.target.value)}
                     placeholder="90"
-                    style={styles.input}
+                    className="pf-input"
+                    inputMode="numeric"
                   />
                 </Field>
 
@@ -759,7 +1267,7 @@ function LandingPage({
                   <select
                     value={form.trainingType}
                     onChange={(e) => updateField("trainingType", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {trainingTypeOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -771,7 +1279,7 @@ function LandingPage({
                   <select
                     value={form.bodyGoal}
                     onChange={(e) => updateField("bodyGoal", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {bodyGoalOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -784,7 +1292,7 @@ function LandingPage({
                     type="time"
                     value={form.wakeTime}
                     onChange={(e) => updateField("wakeTime", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   />
                 </Field>
 
@@ -793,7 +1301,7 @@ function LandingPage({
                     type="time"
                     value={form.schoolStart}
                     onChange={(e) => updateField("schoolStart", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   />
                 </Field>
 
@@ -802,7 +1310,7 @@ function LandingPage({
                     type="time"
                     value={form.practiceTime}
                     onChange={(e) => updateField("practiceTime", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   />
                 </Field>
 
@@ -811,7 +1319,7 @@ function LandingPage({
                     type="time"
                     value={form.bedTime}
                     onChange={(e) => updateField("bedTime", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   />
                 </Field>
 
@@ -819,9 +1327,21 @@ function LandingPage({
                   <select
                     value={form.stomachSensitivity}
                     onChange={(e) => updateField("stomachSensitivity", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {stomachOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Food digestion before training">
+                  <select
+                    value={form.digestTolerance}
+                    onChange={(e) => updateField("digestTolerance", e.target.value)}
+                    className="pf-input"
+                  >
+                    {digestOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
@@ -831,9 +1351,21 @@ function LandingPage({
                   <select
                     value={form.currentHydration}
                     onChange={(e) => updateField("currentHydration", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {hydrationOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="How much do you sweat?">
+                  <select
+                    value={form.sweatRate}
+                    onChange={(e) => updateField("sweatRate", e.target.value)}
+                    className="pf-input"
+                  >
+                    {sweatOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
@@ -843,7 +1375,7 @@ function LandingPage({
                   <select
                     value={form.caffeine}
                     onChange={(e) => updateField("caffeine", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {caffeineOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -855,7 +1387,7 @@ function LandingPage({
                   <select
                     value={form.competitionFrequency}
                     onChange={(e) => updateField("competitionFrequency", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {competitionOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
@@ -867,9 +1399,21 @@ function LandingPage({
                   <select
                     value={form.eatingPattern}
                     onChange={(e) => updateField("eatingPattern", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {eatingPatternOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Breakfast habit">
+                  <select
+                    value={form.breakfastHabit}
+                    onChange={(e) => updateField("breakfastHabit", e.target.value)}
+                    className="pf-input"
+                  >
+                    {breakfastHabitOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
@@ -879,16 +1423,40 @@ function LandingPage({
                   <select
                     value={form.soreness}
                     onChange={(e) => updateField("soreness", e.target.value)}
-                    style={styles.input}
+                    className="pf-input"
                   >
                     {sorenessOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </Field>
+
+                <Field label="Appetite">
+                  <select
+                    value={form.appetite}
+                    onChange={(e) => updateField("appetite", e.target.value)}
+                    className="pf-input"
+                  >
+                    {appetiteOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Food budget">
+                  <select
+                    value={form.budgetLevel}
+                    onChange={(e) => updateField("budgetLevel", e.target.value)}
+                    className="pf-input"
+                  >
+                    {budgetOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
               </div>
 
-              <label style={styles.checkboxRow}>
+              <label className="pf-checkbox-row">
                 <input
                   type="checkbox"
                   checked={form.doubleDay}
@@ -897,52 +1465,96 @@ function LandingPage({
                 <span>I have a double day or unusually heavy training load</span>
               </label>
 
-              <div style={styles.buttonRow}>
-                <button onClick={startCheckout} style={styles.primaryDarkButton}>
+              <div className="pf-button-row">
+                <button onClick={startCheckout} className="pf-dark-btn">
                   Unlock My Full System
                 </button>
-                <button onClick={savePreview} style={styles.secondaryBtnButton}>
+                <button onClick={savePreview} className="pf-secondary-button">
                   Save Preview
+                </button>
+                <button onClick={clearSaved} className="pf-ghost-button">
+                  Clear Saved
                 </button>
               </div>
 
-              {leadMessage ? <p style={styles.helperText}>{leadMessage}</p> : null}
+              {leadMessage ? <p className="pf-helper-text">{leadMessage}</p> : null}
             </div>
           </div>
 
           <div>
-            <div style={styles.sideCard}>
-              <div style={styles.sideCardTop}>What your paid plan includes</div>
+            <div className="pf-side-card">
+              <div className="pf-side-top">What the paid plan includes</div>
 
               {[
                 "Exact calories, protein, carbs, and fats",
                 "Daily hydration target in ounces",
                 "Pre, during, and post-workout strategy",
                 "Full daily meal timing structure",
-                "Meet / game day fueling version",
-                "Recovery tips based on your goal and load",
+                "Competition / meet day version",
+                "Recovery notes, grocery list, and quick grab-and-go ideas",
               ].map((text) => (
-                <div key={text} style={styles.bulletRow}>
-                  <span style={styles.bulletDot}>✓</span>
+                <div key={text} className="pf-bullet-row">
+                  <span className="pf-bullet-dot">✓</span>
                   <span>{text}</span>
                 </div>
               ))}
             </div>
 
-            <div style={styles.quoteCard}>
-              <div style={styles.quoteText}>
+            <div className="pf-quote-card">
+              <div className="pf-quote-text">
                 Built to feel specific, practical, and worth the purchase.
               </div>
-              <div style={styles.quoteSub}>
-                Not generic meal tips. A real structure athletes can actually follow.
+              <div className="pf-quote-sub">
+                Not generic nutrition talk. A real structure athletes can actually follow.
+              </div>
+            </div>
+
+            <div className="pf-side-card">
+              <div className="pf-side-top">Trust + value</div>
+              <div className="pf-bullet-row">
+                <span className="pf-bullet-dot">✓</span>
+                <span>One-time payment. No subscription.</span>
+              </div>
+              <div className="pf-bullet-row">
+                <span className="pf-bullet-dot">✓</span>
+                <span>Works on phone, desktop, save, print, and download.</span>
+              </div>
+              <div className="pf-bullet-row">
+                <span className="pf-bullet-dot">✓</span>
+                <span>Built from your own schedule instead of random templates.</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="pricing" style={styles.pricingSection}>
-        <div style={styles.container}>
+      <section className="pf-proof-section">
+        <div className="pf-container">
+          <SectionHeading
+            eyebrow="Trust"
+            title="Why this converts better"
+            text="This is designed to feel clear, premium, and genuinely useful the second someone lands on the page."
+            center
+          />
+          <div className="pf-proof-grid">
+            <div className="pf-proof-card">
+              <div className="pf-proof-title">Specific inputs</div>
+              <div className="pf-proof-text">The builder asks questions that actually affect fueling, digestion, hydration, and recovery.</div>
+            </div>
+            <div className="pf-proof-card">
+              <div className="pf-proof-title">Specific plan</div>
+              <div className="pf-proof-text">The output changes based on goal, intensity, schedule, stomach sensitivity, hydration, and sweat rate.</div>
+            </div>
+            <div className="pf-proof-card">
+              <div className="pf-proof-title">Feels worth keeping</div>
+              <div className="pf-proof-text">Users can save, print, or download their plan, which makes it feel more real and more valuable.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="pf-pricing-section">
+        <div className="pf-container">
           <SectionHeading
             eyebrow="Pricing"
             title="One payment. Full access."
@@ -950,25 +1562,25 @@ function LandingPage({
             center
           />
 
-          <div style={styles.pricingGridSingle}>
+          <div className="pf-pricing-grid-single">
             {planTiers.map((tier) => (
-              <div key={tier.key} style={styles.priceCardHero}>
-                <div style={styles.priceBadgeFeatured}>{tier.badge}</div>
-                <div style={styles.priceName}>{tier.name}</div>
-                <div style={styles.priceValue}>{tier.price}</div>
-                <div style={styles.priceDescFeatured}>{tier.description}</div>
+              <div key={tier.key} className="pf-price-card">
+                <div className="pf-price-badge">{tier.badge}</div>
+                <div className="pf-price-name">{tier.name}</div>
+                <div className="pf-price-value">{tier.price}</div>
+                <div className="pf-price-desc">{tier.description}</div>
 
-                <div style={styles.priceFeatures}>
+                <div className="pf-price-features">
                   {tier.features.map((item) => (
-                    <div key={item} style={styles.priceFeatureDark}>✓ {item}</div>
+                    <div key={item} className="pf-price-feature">✓ {item}</div>
                   ))}
                 </div>
 
-                <button onClick={startCheckout} style={styles.primaryDarkButtonFull}>
+                <button onClick={startCheckout} className="pf-dark-btn full">
                   Get Instant Access
                 </button>
 
-                <div style={styles.miniTrustText}>
+                <div className="pf-mini-trust-text">
                   One-time payment. No subscription.
                 </div>
               </div>
@@ -980,18 +1592,18 @@ function LandingPage({
   );
 }
 
-function ResultsPage({ plan, isPaid }) {
+function ResultsPage({ plan, isPaid, form, savePreview }) {
   if (!isPaid) {
     return (
-      <section style={styles.resultsHero}>
-        <div style={styles.container}>
-          <div style={styles.resultsCard}>
-            <div style={styles.lockedBadge}>Locked</div>
-            <h1 style={styles.resultsTitle}>This plan is not unlocked yet.</h1>
-            <p style={styles.resultsText}>
+      <section className="pf-results-hero">
+        <div className="pf-container">
+          <div className="pf-results-card">
+            <div className="pf-locked-badge">Locked</div>
+            <h1 className="pf-results-title">This plan is not unlocked yet.</h1>
+            <p className="pf-results-text">
               Complete checkout first, then return here to see your full system.
             </p>
-            <a href="/" style={styles.primaryBtn}>Go back</a>
+            <a href="/" className="pf-primary-btn">Go back</a>
           </div>
         </div>
       </section>
@@ -999,62 +1611,88 @@ function ResultsPage({ plan, isPaid }) {
   }
 
   return (
-    <section style={styles.resultsHero}>
-      <div style={styles.container}>
-        <div style={styles.resultsCard}>
-          <div style={styles.successBadge}>Unlocked</div>
-          <h1 style={styles.resultsTitle}>{plan.title}</h1>
-          <p style={styles.resultsText}>{plan.profileSummary}</p>
+    <section className="pf-results-hero">
+      <div className="pf-container">
+        <div className="pf-results-card">
+          <div className="pf-results-topbar">
+            <div>
+              <div className="pf-success-badge">Unlocked</div>
+              <h1 className="pf-results-title">{plan.title}</h1>
+              <p className="pf-results-text">{plan.profileSummary}</p>
+            </div>
 
-          <div style={styles.resultsSummaryGridFour}>
-            <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Calories</div>
-              <div style={styles.summaryValue}>{plan.macros.calories}</div>
-            </div>
-            <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Protein</div>
-              <div style={styles.summaryValue}>{plan.macros.protein}</div>
-            </div>
-            <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Carbs</div>
-              <div style={styles.summaryValue}>{plan.macros.carbs}</div>
-            </div>
-            <div style={styles.summaryBox}>
-              <div style={styles.summaryLabel}>Fat</div>
-              <div style={styles.summaryValue}>{plan.macros.fat}</div>
+            <div className="pf-download-actions">
+              <button onClick={savePreview} className="pf-secondary-button">Save</button>
+              <button onClick={() => downloadPlanAsHtml(plan, form)} className="pf-secondary-button">Download</button>
+              <button onClick={() => downloadPlanAsText(plan, form)} className="pf-secondary-button">TXT</button>
+              <button onClick={() => printPlan(plan)} className="pf-dark-btn">Print / PDF</button>
             </div>
           </div>
 
-          <div style={styles.resultsSummaryGridTwo}>
-            <div style={styles.bigInfoCard}>
-              <div style={styles.bigInfoTitle}>Daily hydration target</div>
-              <div style={styles.bigInfoValue}>{plan.hydrationTarget}</div>
-              <div style={styles.bigInfoText}>During training: {plan.duringTraining}</div>
+          <div className="pf-summary-grid-four">
+            <div className="pf-summary-box">
+              <div className="pf-summary-label">Calories</div>
+              <div className="pf-summary-value">{plan.macros.calories}</div>
             </div>
-            <div style={styles.bigInfoCard}>
-              <div style={styles.bigInfoTitle}>Carb focus</div>
-              <div style={styles.bigInfoText}>{plan.carbFocus}</div>
+            <div className="pf-summary-box">
+              <div className="pf-summary-label">Protein</div>
+              <div className="pf-summary-value">{plan.macros.protein}</div>
+            </div>
+            <div className="pf-summary-box">
+              <div className="pf-summary-label">Carbs</div>
+              <div className="pf-summary-value">{plan.macros.carbs}</div>
+            </div>
+            <div className="pf-summary-box">
+              <div className="pf-summary-label">Fat</div>
+              <div className="pf-summary-value">{plan.macros.fat}</div>
             </div>
           </div>
 
-          <div style={styles.whyBox}>
-            <div style={styles.whyTitle}>Why this system works</div>
-            <div style={styles.whyText}>{plan.whyThisWorks}</div>
+          <div className="pf-summary-grid-two">
+            <div className="pf-big-card">
+              <div className="pf-big-title">Daily hydration target</div>
+              <div className="pf-big-value">{plan.hydrationTarget}</div>
+              <div className="pf-big-text">During training: {plan.duringTraining}</div>
+            </div>
+            <div className="pf-big-card">
+              <div className="pf-big-title">Carb focus</div>
+              <div className="pf-big-text">{plan.carbFocus}</div>
+            </div>
           </div>
 
-          <div style={styles.sectionBlock}>
-            <div style={styles.resultsBlockTitle}>Your full day schedule</div>
+          <div className="pf-why-box">
+            <div className="pf-why-title">Why this system works</div>
+            <div className="pf-why-text">{plan.whyThisWorks}</div>
+          </div>
 
-            <div style={styles.fullPlanWrap}>
+          <div className="pf-summary-grid-two">
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Main priorities</div>
+              {plan.priorityBullets.map((tip) => (
+                <div key={tip} className="pf-small-result">✓ {tip}</div>
+              ))}
+            </div>
+
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Recovery system</div>
+              {plan.recoveryTips.map((tip) => (
+                <div key={tip} className="pf-small-result">✓ {tip}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="pf-section-block">
+            <div className="pf-results-block-title">Your full day schedule</div>
+            <div className="pf-full-plan-wrap">
               {plan.items.map((item) => (
-                <div key={item.time + item.title} style={styles.fullPlanItem}>
-                  <div style={styles.timeBox}>{item.time}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={styles.itemTitle}>{item.title}</div>
-                    <div style={styles.itemDesc}>{item.desc}</div>
-                    <div style={styles.resultMetaLine}>{item.macros}</div>
-                    <div style={styles.resultMetaLine}>{item.hydration}</div>
-                    <ul style={styles.examplesList}>
+                <div key={item.time + item.title} className="pf-full-plan-item">
+                  <div className="pf-time-box">{item.time}</div>
+                  <div className="pf-item-content">
+                    <div className="pf-item-title">{item.title}</div>
+                    <div className="pf-item-desc">{item.desc}</div>
+                    <div className="pf-item-meta">{item.macros}</div>
+                    <div className="pf-item-meta secondary">{item.hydration}</div>
+                    <ul className="pf-examples-list">
                       {item.examples.map((example) => (
                         <li key={example}>{example}</li>
                       ))}
@@ -1065,39 +1703,45 @@ function ResultsPage({ plan, isPaid }) {
             </div>
           </div>
 
-          <div style={styles.resultsSummaryGridTwo}>
-            <div style={styles.sectionMiniCard}>
-              <div style={styles.resultsBlockTitle}>Meet / game day version</div>
-              <div style={styles.smallResultBlock}>
-                <strong>Night before:</strong> {plan.meetGameDay.nightBefore}
-              </div>
-              <div style={styles.smallResultBlock}>
-                <strong>Pre-event:</strong> {plan.meetGameDay.preEvent}
-              </div>
-              <div style={styles.smallResultBlock}>
-                <strong>During:</strong> {plan.meetGameDay.during}
-              </div>
-              <div style={styles.smallResultBlock}>
-                <strong>After:</strong> {plan.meetGameDay.after}
-              </div>
+          <div className="pf-summary-grid-two">
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Competition / meet day version</div>
+              <div className="pf-small-result"><strong>Night before:</strong> {plan.meetGameDay.nightBefore}</div>
+              <div className="pf-small-result"><strong>Pre-event:</strong> {plan.meetGameDay.preEvent}</div>
+              <div className="pf-small-result"><strong>During:</strong> {plan.meetGameDay.during}</div>
+              <div className="pf-small-result"><strong>After:</strong> {plan.meetGameDay.after}</div>
             </div>
 
-            <div style={styles.sectionMiniCard}>
-              <div style={styles.resultsBlockTitle}>Recovery system</div>
-              {plan.recoveryTips.map((tip) => (
-                <div key={tip} style={styles.smallResultBlock}>
-                  ✓ {tip}
-                </div>
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Common mistakes to avoid</div>
+              {plan.commonMistakes.map((item) => (
+                <div key={item} className="pf-small-result">• {item}</div>
               ))}
             </div>
           </div>
 
-          <div style={styles.noteBox}>
-            This is general educational fueling guidance, not medical advice. Adjust for allergies, preferences, medical needs, and coach or dietitian guidance.
+          <div className="pf-summary-grid-two">
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Quick grocery list</div>
+              {plan.groceryList.map((item) => (
+                <div key={item} className="pf-small-result">• {item}</div>
+              ))}
+            </div>
+
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Fast grab-and-go options</div>
+              {plan.convenienceList.map((item) => (
+                <div key={item} className="pf-small-result">• {item}</div>
+              ))}
+            </div>
           </div>
 
-          <div style={{ marginTop: 20 }}>
-            <a href="/" style={styles.secondaryBtn}>Build another plan</a>
+          <div className="pf-note-box">
+            This is general educational fueling guidance, not medical advice. Adjust for allergies, preferences, and any advice from a qualified professional.
+          </div>
+
+          <div className="pf-results-bottom-actions">
+            <a href="/" className="pf-secondary-btn">Build another plan</a>
           </div>
         </div>
       </div>
@@ -1123,11 +1767,16 @@ export default function PeakFuelWebsite() {
     bedTime: "22:30",
     doubleDay: false,
     stomachSensitivity: "normal",
+    digestTolerance: "good",
     currentHydration: "okay",
+    sweatRate: "normal",
     caffeine: "none",
     competitionFrequency: "sometimes",
     eatingPattern: "somewhat",
     soreness: "medium",
+    breakfastHabit: "sometimes",
+    appetite: "normal",
+    budgetLevel: "medium",
   });
 
   const [leadMessage, setLeadMessage] = useState("");
@@ -1165,8 +1814,8 @@ export default function PeakFuelWebsite() {
   }
 
   function savePreview() {
-    if (!form.email.trim()) {
-      setLeadMessage("Enter your email first so your preview can be saved.");
+    if (!String(form.email || "").trim()) {
+      setLeadMessage("Enter your email first so your plan can be saved.");
       return;
     }
 
@@ -1178,11 +1827,16 @@ export default function PeakFuelWebsite() {
     };
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    setLeadMessage("Preview saved to this device.");
+    setLeadMessage("Plan saved to this device.");
+  }
+
+  function clearSaved() {
+    localStorage.removeItem(STORAGE_KEY);
+    setLeadMessage("Saved plan cleared from this device.");
   }
 
   function startCheckout() {
-    if (!form.email.trim()) {
+    if (!String(form.email || "").trim()) {
       setLeadMessage("Enter your email first before unlocking your full system.");
       return;
     }
@@ -1199,10 +1853,16 @@ export default function PeakFuelWebsite() {
   }
 
   return (
-    <div style={styles.page}>
+    <div className="pf-page">
       <style>{globalCss}</style>
+
       {path === "/results" ? (
-        <ResultsPage plan={plan} isPaid={isPaid} />
+        <ResultsPage
+          plan={plan}
+          isPaid={isPaid}
+          form={form}
+          savePreview={savePreview}
+        />
       ) : (
         <LandingPage
           form={form}
@@ -1210,6 +1870,7 @@ export default function PeakFuelWebsite() {
           plan={plan}
           startCheckout={startCheckout}
           savePreview={savePreview}
+          clearSaved={clearSaved}
           leadMessage={leadMessage}
         />
       )}
@@ -1217,1096 +1878,1032 @@ export default function PeakFuelWebsite() {
   );
 }
 
-const styles = {
-  page: {
-    background: "#ffffff",
-    color: "#09090b",
-    minHeight: "100vh",
-    fontFamily:
-      "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-
-  container: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "0 24px",
-  },
-
-  containerSection: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "28px 24px 64px",
-  },
-
-  containerSectionTight: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "8px 24px 56px",
-  },
-
-  heroWrap: {
-    position: "relative",
-    overflow: "hidden",
-    borderBottom: "1px solid #e4e4e7",
-    background:
-      "radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 28%), linear-gradient(to bottom, #ffffff, #f8fbff)",
-  },
-
-  gridBg: {
-    position: "absolute",
-    inset: 0,
-    opacity: 0.45,
-    backgroundImage:
-      "linear-gradient(to right, rgba(24,24,27,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(24,24,27,0.04) 1px, transparent 1px)",
-    backgroundSize: "42px 42px",
-    pointerEvents: "none",
-  },
-
-  header: {
-    position: "relative",
-    zIndex: 2,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-    padding: 16,
-    marginTop: 24,
-    border: "1px solid rgba(228,228,231,0.9)",
-    borderRadius: 28,
-    background: "rgba(255,255,255,0.88)",
-    backdropFilter: "blur(12px)",
-    boxShadow: "0 8px 30px rgba(0,0,0,0.04)",
-  },
-
-  logoWrap: { display: "flex", alignItems: "center", gap: 12 },
-
-  logo: {
-    width: 44,
-    height: 44,
-    display: "grid",
-    placeItems: "center",
-    borderRadius: 16,
-    background: "#09090b",
-    color: "white",
-    fontWeight: 800,
-    fontSize: 14,
-  },
-
-  logoTitle: { fontSize: 14, fontWeight: 700 },
-  logoSub: { fontSize: 12, color: "#71717a" },
-
-  nav: {
-    display: "flex",
-    gap: 24,
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-
-  navLink: {
-    color: "#52525b",
-    textDecoration: "none",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-
-  headerCta: {
-    background: "#09090b",
-    color: "white",
-    textDecoration: "none",
-    padding: "12px 16px",
-    borderRadius: 16,
-    fontWeight: 700,
-    fontSize: 14,
-  },
-
-  heroGrid: {
-    position: "relative",
-    zIndex: 2,
-    display: "grid",
-    gridTemplateColumns: "1.02fr 0.98fr",
-    gap: 40,
-    alignItems: "center",
-    padding: "48px 0 72px",
-  },
-
-  heroLeft: {
-    paddingTop: 8,
-  },
-
-  badge: {
-    display: "inline-flex",
-    padding: "8px 14px",
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.9)",
-    color: "#0369a1",
-    border: "1px solid #bae6fd",
-    fontWeight: 700,
-    fontSize: 12,
-  },
-
-  heroTitle: {
-    fontSize: 66,
-    lineHeight: 1.01,
-    letterSpacing: "-0.05em",
-    margin: "20px 0 0",
-    maxWidth: 640,
-  },
-
-  heroText: {
-    marginTop: 18,
-    maxWidth: 620,
-    color: "#52525b",
-    fontSize: 19,
-    lineHeight: 1.65,
-  },
-
-  heroButtons: {
-    display: "flex",
-    gap: 16,
-    marginTop: 28,
-    flexWrap: "wrap",
-  },
-
-  heroTrustRow: {
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-    marginTop: 20,
-  },
-
-  heroTrustPill: {
-    padding: "10px 14px",
-    borderRadius: 999,
-    background: "#ffffff",
-    border: "1px solid #e4e4e7",
-    color: "#27272a",
-    fontSize: 13,
-    fontWeight: 700,
-  },
-
-  primaryBtn: {
-    background: "#0ea5e9",
-    color: "white",
-    textDecoration: "none",
-    padding: "16px 22px",
-    borderRadius: 18,
-    fontWeight: 800,
-    display: "inline-block",
-  },
-
-  secondaryBtn: {
-    background: "white",
-    color: "#09090b",
-    textDecoration: "none",
-    padding: "16px 22px",
-    borderRadius: 18,
-    fontWeight: 800,
-    border: "1px solid #d4d4d8",
-    display: "inline-block",
-  },
-
-  secondaryBtnButton: {
-    background: "white",
-    color: "#09090b",
-    border: "1px solid #d4d4d8",
-    padding: "16px 22px",
-    borderRadius: 18,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-
-  primaryDarkButton: {
-    display: "inline-block",
-    marginTop: 12,
-    background: "#09090b",
-    color: "white",
-    border: 0,
-    padding: "15px 20px",
-    borderRadius: 18,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-
-  primaryDarkButtonFull: {
-    display: "block",
-    width: "100%",
-    textAlign: "center",
-    marginTop: 24,
-    background: "#09090b",
-    color: "white",
-    border: 0,
-    padding: "15px 20px",
-    borderRadius: 18,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-
-  previewShell: { position: "relative" },
-
-  previewTopCard: {
-    background: "linear-gradient(135deg, #0ea5e9, #22d3ee 45%, #111827)",
-    color: "white",
-    borderRadius: 30,
-    padding: 24,
-  },
-
-  previewTopMeta: {
-    textTransform: "uppercase",
-    letterSpacing: ".2em",
-    fontSize: 11,
-    fontWeight: 800,
-    color: "rgba(255,255,255,0.82)",
-  },
-
-  previewTitle: {
-    fontSize: 30,
-    fontWeight: 800,
-    lineHeight: 1.1,
-    marginTop: 12,
-  },
-
-  previewSummary: {
-    marginTop: 10,
-    color: "rgba(255,255,255,0.9)",
-    lineHeight: 1.7,
-    fontSize: 15,
-    minHeight: 52,
-  },
-
-  previewListWrap: {
-    marginTop: 18,
-    background: "white",
-    border: "1px solid #e4e4e7",
-    borderRadius: 30,
-    padding: 18,
-    boxShadow: "0 12px 30px rgba(0,0,0,0.04)",
-  },
-
-  previewMetricsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0,1fr))",
-    gap: 12,
-    marginBottom: 14,
-  },
-
-  metricCard: {
-    border: "1px solid #e4e4e7",
-    background: "#fafafa",
-    borderRadius: 20,
-    padding: 14,
-  },
-
-  metricLabel: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#71717a",
-    textTransform: "uppercase",
-    letterSpacing: ".08em",
-  },
-
-  metricValue: {
-    marginTop: 8,
-    fontWeight: 800,
-    fontSize: 18,
-    lineHeight: 1.4,
-  },
-
-  previewItem: {
-    display: "flex",
-    gap: 16,
-    alignItems: "flex-start",
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 12,
-  },
-
-  timeBox: {
-    minWidth: 92,
-    background: "#09090b",
-    color: "white",
-    borderRadius: 18,
-    padding: "12px 10px",
-    textAlign: "center",
-    fontSize: 12,
-    fontWeight: 800,
-  },
-
-  itemTitle: {
-    fontWeight: 800,
-    fontSize: 16,
-  },
-
-  itemDesc: {
-    marginTop: 6,
-    color: "#52525b",
-    lineHeight: 1.7,
-    fontSize: 14,
-  },
-
-  itemSubMeta: {
-    marginTop: 10,
-    color: "#0369a1",
-    fontSize: 13,
-    fontWeight: 700,
-  },
-
-  lockedBlock: {
-    border: "1px solid #bae6fd",
-    background: "linear-gradient(135deg, #f0f9ff, #ffffff, #ecfeff)",
-    borderRadius: 28,
-    padding: 18,
-    marginTop: 6,
-  },
-
-  lockedBadge: {
-    display: "inline-block",
-    background: "#09090b",
-    color: "white",
-    borderRadius: 999,
-    padding: "7px 12px",
-    fontSize: 11,
-    fontWeight: 800,
-  },
-
-  lockedTitle: {
-    fontWeight: 800,
-    fontSize: 22,
-    marginTop: 14,
-  },
-
-  lockedText: {
-    color: "#52525b",
-    fontSize: 14,
-    lineHeight: 1.7,
-    marginTop: 8,
-    marginBottom: 14,
-  },
-
-  lockedFeatureGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-    gap: 10,
-    marginBottom: 12,
-  },
-
-  lockedFeature: {
-    fontSize: 13,
-    fontWeight: 700,
-    color: "#0f172a",
-    background: "rgba(255,255,255,0.75)",
-    border: "1px solid #dbeafe",
-    borderRadius: 14,
-    padding: "10px 12px",
-  },
-
-  lightSection: {
-    background: "#ffffff",
-    padding: "56px 0 12px",
-  },
-
-  forYouSection: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 26,
-    alignItems: "center",
-  },
-
-  forYouCard: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 30,
-    background: "linear-gradient(135deg, #ffffff, #fafafa)",
-    padding: 26,
-  },
-
-  forYouRow: {
-    display: "flex",
-    gap: 12,
-    alignItems: "flex-start",
-    padding: "14px 0",
-    borderBottom: "1px solid #f4f4f5",
-    fontSize: 16,
-    color: "#27272a",
-    lineHeight: 1.7,
-  },
-
-  forYouCheck: {
-    color: "#0284c7",
-    fontWeight: 900,
-  },
-
-  trustStrip: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0,1fr))",
-    gap: 16,
-  },
-
-  trustStripItem: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 20,
-    background: "white",
-  },
-
-  trustStripTitle: {
-    fontWeight: 800,
-    fontSize: 18,
-  },
-
-  trustStripText: {
-    marginTop: 8,
-    color: "#52525b",
-    lineHeight: 1.7,
-    fontSize: 14,
-  },
-
-  twoCol: {
-    display: "grid",
-    gridTemplateColumns: "1fr 0.92fr",
-    gap: 32,
-    alignItems: "start",
-  },
-
-  eyebrow: {
-    color: "#0284c7",
-    fontWeight: 800,
-    fontSize: 12,
-    letterSpacing: ".24em",
-    textTransform: "uppercase",
-  },
-
-  sectionTitle: {
-    margin: "12px 0 0",
-    fontWeight: 800,
-    fontSize: 46,
-    lineHeight: 1.08,
-    letterSpacing: "-0.03em",
-  },
-
-  sectionText: {
-    color: "#52525b",
-    fontSize: 18,
-    lineHeight: 1.8,
-    marginTop: 16,
-  },
-
-  formCard: {
-    marginTop: 24,
-    border: "1px solid #e4e4e7",
-    borderRadius: 32,
-    background: "linear-gradient(135deg, #ffffff, #fafafa)",
-    padding: 24,
-  },
-
-  formGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-    gap: 16,
-  },
-
-  label: {
-    display: "block",
-    fontSize: 14,
-    fontWeight: 700,
-    marginBottom: 8,
-    color: "#3f3f46",
-  },
-
-  input: {
-    width: "100%",
-    padding: "14px 16px",
-    borderRadius: 18,
-    border: "1px solid #d4d4d8",
-    background: "white",
-    fontSize: 15,
-    outline: "none",
-  },
-
-  checkboxRow: {
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
-    border: "1px solid #e4e4e7",
-    borderRadius: 18,
-    padding: 16,
-    marginTop: 16,
-    background: "white",
-    fontSize: 14,
-    color: "#3f3f46",
-  },
-
-  buttonRow: {
-    display: "flex",
-    gap: 14,
-    flexWrap: "wrap",
-    marginTop: 18,
-  },
-
-  helperText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#52525b",
-  },
-
-  sideCard: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 32,
-    background: "white",
-    padding: 24,
-  },
-
-  sideCardTop: {
-    fontSize: 22,
-    fontWeight: 800,
-    marginBottom: 14,
-  },
-
-  bulletRow: {
-    display: "flex",
-    gap: 12,
-    alignItems: "flex-start",
-    padding: "14px 0",
-    borderBottom: "1px solid #f4f4f5",
-    color: "#3f3f46",
-    lineHeight: 1.7,
-    fontSize: 15,
-  },
-
-  bulletDot: {
-    color: "#0284c7",
-    fontWeight: 900,
-  },
-
-  quoteCard: {
-    marginTop: 16,
-    border: "1px solid #e4e4e7",
-    borderRadius: 28,
-    background: "#fafafa",
-    padding: 22,
-  },
-
-  quoteText: {
-    fontSize: 18,
-    lineHeight: 1.7,
-    fontWeight: 700,
-    color: "#18181b",
-  },
-
-  quoteSub: {
-    marginTop: 10,
-    color: "#52525b",
-    fontSize: 14,
-    lineHeight: 1.7,
-  },
-
-  pricingSection: {
-    background: "#09090b",
-    color: "white",
-    padding: "72px 0",
-  },
-
-  pricingGridSingle: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 560px)",
-    justifyContent: "center",
-    marginTop: 34,
-  },
-
-  priceCardHero: {
-    border: "2px solid #38bdf8",
-    borderRadius: 36,
-    padding: 34,
-    background: "white",
-    color: "#09090b",
-  },
-
-  priceBadgeFeatured: {
-    display: "inline-block",
-    borderRadius: 999,
-    padding: "7px 12px",
-    fontSize: 12,
-    fontWeight: 800,
-    background: "#e0f2fe",
-    color: "#0369a1",
-  },
-
-  priceName: {
-    marginTop: 18,
-    fontSize: 28,
-    fontWeight: 800,
-  },
-
-  priceValue: {
-    marginTop: 12,
-    fontSize: 56,
-    fontWeight: 900,
-  },
-
-  priceDescFeatured: {
-    marginTop: 14,
-    color: "#52525b",
-    lineHeight: 1.7,
-  },
-
-  priceFeatures: {
-    marginTop: 18,
-    display: "grid",
-    gap: 10,
-  },
-
-  priceFeatureDark: {
-    fontSize: 15,
-    lineHeight: 1.7,
-    color: "#27272a",
-  },
-
-  miniTrustText: {
-    marginTop: 14,
-    textAlign: "center",
-    color: "#71717a",
-    fontSize: 13,
-    fontWeight: 700,
-  },
-
-  resultsHero: {
-    padding: "48px 0 72px",
-    background: "linear-gradient(to bottom, #f8fbff, #ffffff)",
-    minHeight: "100vh",
-  },
-
-  resultsCard: {
-    background: "white",
-    border: "1px solid #e4e4e7",
-    borderRadius: 32,
-    padding: 28,
-    boxShadow: "0 12px 30px rgba(0,0,0,0.04)",
-  },
-
-  successBadge: {
-    display: "inline-block",
-    background: "#166534",
-    color: "white",
-    borderRadius: 999,
-    padding: "7px 12px",
-    fontSize: 11,
-    fontWeight: 800,
-  },
-
-  resultsTitle: {
-    fontSize: 44,
-    lineHeight: 1.05,
-    letterSpacing: "-0.03em",
-    margin: "18px 0 0",
-  },
-
-  resultsText: {
-    color: "#52525b",
-    fontSize: 18,
-    lineHeight: 1.7,
-    marginTop: 14,
-  },
-
-  resultsSummaryGridFour: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0,1fr))",
-    gap: 16,
-    marginTop: 28,
-  },
-
-  resultsSummaryGridTwo: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-    gap: 16,
-    marginTop: 18,
-  },
-
-  summaryBox: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 18,
-    background: "#fafafa",
-  },
-
-  summaryLabel: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: ".08em",
-    color: "#71717a",
-    fontWeight: 700,
-  },
-
-  summaryValue: {
-    marginTop: 10,
-    fontWeight: 800,
-    fontSize: 18,
-    lineHeight: 1.5,
-  },
-
-  bigInfoCard: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 20,
-    background: "#ffffff",
-  },
-
-  bigInfoTitle: {
-    fontSize: 14,
-    fontWeight: 800,
-    color: "#18181b",
-    textTransform: "uppercase",
-    letterSpacing: ".08em",
-  },
-
-  bigInfoValue: {
-    marginTop: 10,
-    fontSize: 28,
-    fontWeight: 900,
-    lineHeight: 1.2,
-  },
-
-  bigInfoText: {
-    marginTop: 10,
-    color: "#52525b",
-    lineHeight: 1.7,
-    fontSize: 15,
-  },
-
-  whyBox: {
-    marginTop: 22,
-    border: "1px solid #bae6fd",
-    background: "linear-gradient(135deg, #f0f9ff, #ffffff)",
-    borderRadius: 24,
-    padding: 18,
-  },
-
-  whyTitle: {
-    fontWeight: 800,
-    fontSize: 18,
-  },
-
-  whyText: {
-    marginTop: 8,
-    color: "#52525b",
-    lineHeight: 1.7,
-  },
-
-  sectionBlock: {
-    marginTop: 24,
-  },
-
-  resultsBlockTitle: {
-    fontWeight: 800,
-    fontSize: 24,
-    marginBottom: 14,
-  },
-
-  fullPlanWrap: {
-    display: "grid",
-    gap: 14,
-  },
-
-  fullPlanItem: {
-    display: "flex",
-    gap: 16,
-    alignItems: "flex-start",
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 18,
-  },
-
-  resultMetaLine: {
-    marginTop: 8,
-    color: "#0369a1",
-    fontSize: 13,
-    fontWeight: 700,
-  },
-
-  examplesList: {
-    marginTop: 10,
-    marginBottom: 0,
-    paddingLeft: 18,
-    color: "#27272a",
-    lineHeight: 1.8,
-  },
-
-  sectionMiniCard: {
-    border: "1px solid #e4e4e7",
-    borderRadius: 24,
-    padding: 20,
-    background: "#ffffff",
-  },
-
-  smallResultBlock: {
-    padding: "10px 0",
-    borderBottom: "1px solid #f4f4f5",
-    color: "#3f3f46",
-    lineHeight: 1.7,
-    fontSize: 15,
-  },
-
-  noteBox: {
-    marginTop: 22,
-    borderTop: "1px solid #e4e4e7",
-    paddingTop: 18,
-    color: "#71717a",
-    fontSize: 14,
-    lineHeight: 1.7,
-  },
-};
-
 const globalCss = `
+  :root {
+    --pf-text: #09090b;
+    --pf-sub: #52525b;
+    --pf-sub-2: #71717a;
+    --pf-line: #e4e4e7;
+    --pf-bg-soft: #fafafa;
+    --pf-blue: #0ea5e9;
+    --pf-blue-dark: #0369a1;
+    --pf-shadow: 0 12px 30px rgba(0,0,0,0.05);
+    --pf-radius-xl: 32px;
+    --pf-radius-lg: 24px;
+    --pf-radius-md: 18px;
+  }
+
   html { scroll-behavior: smooth; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: #ffffff;
+    color: var(--pf-text);
     overflow-x: hidden;
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
   }
 
-  a, button {
-    transition: transform .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease;
+  .pf-page {
+    min-height: 100vh;
+    background: #ffffff;
+    color: var(--pf-text);
   }
 
-  a:hover, button:hover {
+  .pf-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .pf-container-section,
+  .pf-container-section-tight {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .pf-container-section {
+    padding-top: 28px;
+    padding-bottom: 64px;
+  }
+
+  .pf-container-section-tight {
+    padding-top: 8px;
+    padding-bottom: 56px;
+  }
+
+  .pf-hero {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--pf-line);
+    background:
+      radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 28%),
+      linear-gradient(to bottom, #ffffff, #f8fbff);
+  }
+
+  .pf-grid-bg {
+    position: absolute;
+    inset: 0;
+    opacity: 0.45;
+    background-image:
+      linear-gradient(to right, rgba(24,24,27,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(24,24,27,0.04) 1px, transparent 1px);
+    background-size: 42px 42px;
+    pointer-events: none;
+  }
+
+  .pf-header {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    margin-top: 24px;
+    border: 1px solid rgba(228,228,231,0.9);
+    border-radius: 28px;
+    background: rgba(255,255,255,0.88);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.04);
+  }
+
+  .pf-logo-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .pf-logo {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 16px;
+    background: #09090b;
+    color: white;
+    font-weight: 800;
+    font-size: 14px;
+    flex: 0 0 auto;
+  }
+
+  .pf-logo-title { font-size: 14px; font-weight: 800; }
+  .pf-logo-sub { font-size: 12px; color: var(--pf-sub-2); }
+
+  .pf-nav {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pf-nav-link {
+    color: var(--pf-sub);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .pf-header-cta,
+  .pf-primary-btn,
+  .pf-secondary-btn,
+  .pf-dark-btn,
+  .pf-secondary-button,
+  .pf-ghost-button {
+    transition:
+      transform .18s ease,
+      opacity .18s ease,
+      background .18s ease,
+      box-shadow .18s ease,
+      border-color .18s ease;
+  }
+
+  .pf-header-cta:hover,
+  .pf-primary-btn:hover,
+  .pf-secondary-btn:hover,
+  .pf-dark-btn:hover,
+  .pf-secondary-button:hover,
+  .pf-ghost-button:hover {
     transform: translateY(-1px);
   }
 
-  input:focus, select:focus {
-    border-color: #38bdf8 !important;
+  .pf-header-cta {
+    background: #09090b;
+    color: white;
+    text-decoration: none;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-weight: 800;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .pf-hero-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1.02fr 0.98fr;
+    gap: 40px;
+    align-items: center;
+    padding: 48px 0 72px;
+  }
+
+  .pf-hero-left {
+    padding-top: 8px;
+    min-width: 0;
+  }
+
+  .pf-badge {
+    display: inline-flex;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.9);
+    color: var(--pf-blue-dark);
+    border: 1px solid #bae6fd;
+    font-weight: 800;
+    font-size: 12px;
+  }
+
+  .pf-hero-title {
+    font-size: 66px;
+    line-height: 1.01;
+    letter-spacing: -0.05em;
+    margin: 20px 0 0;
+    max-width: 640px;
+    word-break: break-word;
+  }
+
+  .pf-hero-text {
+    margin-top: 18px;
+    max-width: 620px;
+    color: var(--pf-sub);
+    font-size: 19px;
+    line-height: 1.65;
+  }
+
+  .pf-hero-buttons,
+  .pf-button-row,
+  .pf-download-actions,
+  .pf-results-bottom-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .pf-hero-buttons { margin-top: 28px; }
+  .pf-button-row { margin-top: 18px; }
+  .pf-download-actions { justify-content: flex-end; }
+  .pf-results-bottom-actions { margin-top: 20px; }
+
+  .pf-primary-btn,
+  .pf-secondary-btn,
+  .pf-dark-btn,
+  .pf-secondary-button,
+  .pf-ghost-button {
+    border-radius: 18px;
+    font-weight: 800;
+    font-size: 15px;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .pf-primary-btn {
+    background: var(--pf-blue);
+    color: white;
+    text-decoration: none;
+    padding: 16px 22px;
+    display: inline-block;
+  }
+
+  .pf-secondary-btn {
+    background: white;
+    color: var(--pf-text);
+    text-decoration: none;
+    padding: 16px 22px;
+    border: 1px solid #d4d4d8;
+    display: inline-block;
+  }
+
+  .pf-secondary-button {
+    background: white;
+    color: var(--pf-text);
+    border: 1px solid #d4d4d8;
+    padding: 15px 20px;
+  }
+
+  .pf-ghost-button {
+    background: #fafafa;
+    color: var(--pf-text);
+    border: 1px solid #e4e4e7;
+    padding: 15px 20px;
+  }
+
+  .pf-dark-btn {
+    display: inline-block;
+    background: #09090b;
+    color: white;
+    border: 0;
+    padding: 15px 20px;
+  }
+
+  .pf-dark-btn.full {
+    width: 100%;
+    margin-top: 24px;
+  }
+
+  .pf-hero-trust-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .pf-pill {
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid var(--pf-line);
+    color: #27272a;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .pf-mini-proof {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 22px;
+  }
+
+  .pf-mini-proof-item {
+    border: 1px solid var(--pf-line);
+    background: rgba(255,255,255,0.8);
+    border-radius: 18px;
+    padding: 14px 16px;
+    min-width: 150px;
+  }
+
+  .pf-mini-proof-item strong {
+    display: block;
+    font-size: 22px;
+    line-height: 1.1;
+  }
+
+  .pf-mini-proof-item span {
+    display: block;
+    color: var(--pf-sub-2);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  .pf-preview-shell { min-width: 0; }
+
+  .pf-preview-top {
+    background: linear-gradient(135deg, #0ea5e9, #22d3ee 45%, #111827);
+    color: white;
+    border-radius: 30px;
+    padding: 24px;
+  }
+
+  .pf-preview-meta {
+    text-transform: uppercase;
+    letter-spacing: .2em;
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.82);
+  }
+
+  .pf-preview-title {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-top: 12px;
+    word-break: break-word;
+  }
+
+  .pf-preview-summary {
+    margin-top: 10px;
+    color: rgba(255,255,255,0.92);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  .pf-preview-wrap {
+    margin-top: 18px;
+    background: white;
+    border: 1px solid var(--pf-line);
+    border-radius: 30px;
+    padding: 18px;
+    box-shadow: var(--pf-shadow);
+  }
+
+  .pf-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .pf-metric-card,
+  .pf-summary-box {
+    border: 1px solid var(--pf-line);
+    background: #fafafa;
+    border-radius: 20px;
+    padding: 14px;
+    min-width: 0;
+  }
+
+  .pf-metric-label,
+  .pf-summary-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pf-sub-2);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .pf-metric-value,
+  .pf-summary-value {
+    margin-top: 8px;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-preview-item,
+  .pf-full-plan-item {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    border: 1px solid var(--pf-line);
+    border-radius: 24px;
+    padding: 16px;
+    margin-bottom: 12px;
+    min-width: 0;
+  }
+
+  .pf-item-content { flex: 1; min-width: 0; }
+
+  .pf-time-box {
+    min-width: 92px;
+    background: #09090b;
+    color: white;
+    border-radius: 18px;
+    padding: 12px 10px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.3;
+    flex: 0 0 auto;
+  }
+
+  .pf-item-title {
+    font-weight: 800;
+    font-size: 16px;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-item-desc {
+    margin-top: 6px;
+    color: var(--pf-sub);
+    line-height: 1.7;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-item-meta {
+    margin-top: 10px;
+    color: var(--pf-blue-dark);
+    font-size: 13px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-item-meta.secondary { color: #0f172a; }
+
+  .pf-locked-block,
+  .pf-why-box {
+    border: 1px solid #bae6fd;
+    background: linear-gradient(135deg, #f0f9ff, #ffffff, #ecfeff);
+    border-radius: 28px;
+    padding: 18px;
+    margin-top: 6px;
+  }
+
+  .pf-locked-badge,
+  .pf-success-badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 11px;
+    font-weight: 800;
+    color: white;
+  }
+
+  .pf-locked-badge { background: #09090b; }
+  .pf-success-badge { background: #166534; }
+
+  .pf-locked-title,
+  .pf-why-title {
+    font-weight: 800;
+    font-size: 22px;
+    margin-top: 14px;
+  }
+
+  .pf-locked-text,
+  .pf-why-text {
+    color: var(--pf-sub);
+    font-size: 14px;
+    line-height: 1.7;
+    margin-top: 8px;
+  }
+
+  .pf-locked-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 10px;
+    margin: 16px 0 12px;
+  }
+
+  .pf-locked-feature {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    background: rgba(255,255,255,0.75);
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+
+  .pf-light-section {
+    background: #ffffff;
+    padding: 56px 0 12px;
+  }
+
+  .pf-for-you-section,
+  .pf-two-col,
+  .pf-summary-grid-two {
+    display: grid;
+    gap: 26px;
+    align-items: start;
+  }
+
+  .pf-for-you-section {
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+  }
+
+  .pf-two-col {
+    grid-template-columns: 1fr 0.92fr;
+    gap: 32px;
+  }
+
+  .pf-for-you-card,
+  .pf-form-card,
+  .pf-side-card,
+  .pf-quote-card,
+  .pf-proof-card,
+  .pf-price-card,
+  .pf-results-card,
+  .pf-big-card,
+  .pf-mini-card {
+    border: 1px solid var(--pf-line);
+    border-radius: 30px;
+    background: white;
+    padding: 24px;
+    min-width: 0;
+  }
+
+  .pf-for-you-card,
+  .pf-form-card {
+    background: linear-gradient(135deg, #ffffff, #fafafa);
+  }
+
+  .pf-for-you-row,
+  .pf-bullet-row,
+  .pf-small-result {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px 0;
+    border-bottom: 1px solid #f4f4f5;
+    color: #27272a;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  .pf-check,
+  .pf-bullet-dot {
+    color: var(--pf-blue-dark);
+    font-weight: 900;
+    flex: 0 0 auto;
+  }
+
+  .pf-trust-strip,
+  .pf-proof-grid,
+  .pf-summary-grid-four {
+    display: grid;
+    gap: 16px;
+  }
+
+  .pf-trust-strip {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+  }
+
+  .pf-proof-grid {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    margin-top: 28px;
+  }
+
+  .pf-trust-item,
+  .pf-proof-card {
+    border: 1px solid var(--pf-line);
+    border-radius: 24px;
+    padding: 20px;
+    background: white;
+  }
+
+  .pf-trust-title,
+  .pf-proof-title,
+  .pf-side-top,
+  .pf-results-block-title {
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-trust-text,
+  .pf-proof-text,
+  .pf-quote-sub,
+  .pf-helper-text,
+  .pf-note-box,
+  .pf-section-text,
+  .pf-results-text,
+  .pf-big-text {
+    margin-top: 8px;
+    color: var(--pf-sub);
+    line-height: 1.7;
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-section-heading { max-width: 780px; }
+  .pf-section-heading.center { text-align: center; margin: 0 auto; }
+
+  .pf-eyebrow {
+    color: var(--pf-blue-dark);
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+  }
+
+  .pf-section-title {
+    margin: 12px 0 0;
+    font-weight: 800;
+    font-size: 46px;
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-progress-row {
+    margin-bottom: 18px;
+  }
+
+  .pf-progress-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--pf-sub-2);
+    margin-bottom: 10px;
+  }
+
+  .pf-progress-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    overflow: hidden;
+  }
+
+  .pf-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #38bdf8, #0ea5e9);
+  }
+
+  .pf-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 16px;
+  }
+
+  .pf-field { min-width: 0; }
+
+  .pf-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #3f3f46;
+  }
+
+  .pf-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--pf-sub-2);
+    line-height: 1.5;
+  }
+
+  .pf-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 56px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid #d4d4d8;
+    background: white;
+    color: var(--pf-text);
+    font-size: 15px;
+    outline: none;
+    box-shadow: none;
+  }
+
+  .pf-input:focus {
+    border-color: #38bdf8;
     box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
   }
 
+  .pf-checkbox-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border: 1px solid var(--pf-line);
+    border-radius: 18px;
+    padding: 16px;
+    margin-top: 16px;
+    background: white;
+    font-size: 14px;
+    color: #3f3f46;
+  }
+
+  .pf-quote-text {
+    font-size: 18px;
+    line-height: 1.7;
+    font-weight: 700;
+    color: #18181b;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-proof-section {
+    padding: 14px 0 68px;
+  }
+
+  .pf-pricing-section {
+    background: #09090b;
+    color: white;
+    padding: 72px 0;
+  }
+
+  .pf-pricing-grid-single {
+    display: grid;
+    grid-template-columns: minmax(0, 560px);
+    justify-content: center;
+    margin-top: 34px;
+  }
+
+  .pf-price-card {
+    border: 2px solid #38bdf8;
+    border-radius: 36px;
+    padding: 34px;
+    background: white;
+    color: var(--pf-text);
+  }
+
+  .pf-price-badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    background: #e0f2fe;
+    color: var(--pf-blue-dark);
+  }
+
+  .pf-price-name {
+    margin-top: 18px;
+    font-size: 28px;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-price-value {
+    margin-top: 12px;
+    font-size: 56px;
+    font-weight: 900;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-price-desc {
+    margin-top: 14px;
+    color: var(--pf-sub);
+    line-height: 1.7;
+  }
+
+  .pf-price-features {
+    margin-top: 18px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .pf-price-feature {
+    font-size: 15px;
+    line-height: 1.7;
+    color: #27272a;
+  }
+
+  .pf-mini-trust-text {
+    margin-top: 14px;
+    text-align: center;
+    color: var(--pf-sub-2);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .pf-results-hero {
+    padding: 48px 0 72px;
+    background: linear-gradient(to bottom, #f8fbff, #ffffff);
+    min-height: 100vh;
+  }
+
+  .pf-results-card {
+    box-shadow: var(--pf-shadow);
+    border-radius: 32px;
+  }
+
+  .pf-results-topbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .pf-results-title {
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 18px 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-summary-grid-four {
+    grid-template-columns: repeat(4, minmax(0,1fr));
+    margin-top: 28px;
+  }
+
+  .pf-summary-grid-two {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    margin-top: 18px;
+  }
+
+  .pf-big-card,
+  .pf-mini-card {
+    border-radius: 24px;
+  }
+
+  .pf-big-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #18181b;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .pf-big-value {
+    margin-top: 10px;
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-section-block { margin-top: 24px; }
+  .pf-full-plan-wrap { display: grid; gap: 14px; }
+  .pf-examples-list {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    color: #27272a;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+  }
+
+  .pf-note-box {
+    margin-top: 22px;
+    border-top: 1px solid var(--pf-line);
+    padding-top: 18px;
+    font-size: 14px;
+  }
+
   @media (max-width: 1100px) {
-    div[style*="grid-template-columns: 1.02fr 0.98fr"],
-    div[style*="grid-template-columns: 1fr 0.92fr"],
-    div[style*="grid-template-columns: 1fr 1fr"],
-    div[style*="grid-template-columns: repeat(4, minmax(0,1fr))"] {
-      grid-template-columns: 1fr !important;
+    .pf-hero-grid,
+    .pf-two-col,
+    .pf-for-you-section,
+    .pf-summary-grid-four {
+      grid-template-columns: 1fr;
+    }
+
+    .pf-proof-grid,
+    .pf-trust-strip {
+      grid-template-columns: 1fr;
     }
   }
 
-  @media (max-width: 960px) {
-    h1 { font-size: 46px !important; }
-    h2 { font-size: 34px !important; }
-  }
+  @media (max-width: 900px) {
+    .pf-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
 
-  @media (max-width: 640px) {
-    html, body {
-      overflow-x: hidden !important;
+    .pf-nav {
+      justify-content: center;
+    }
+
+    .pf-header-cta {
       width: 100%;
     }
 
-    h1 { font-size: 38px !important; }
-    h2 { font-size: 30px !important; }
+    .pf-hero-title { font-size: 48px; }
+    .pf-section-title { font-size: 34px; }
+    .pf-results-title { font-size: 34px; }
 
-    div[style*="max-width: 1200px"] {
-      padding-left: 16px !important;
-      padding-right: 16px !important;
+    .pf-summary-grid-two,
+    .pf-form-grid,
+    .pf-locked-feature-grid,
+    .pf-metrics-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pf-container,
+    .pf-container-section,
+    .pf-container-section-tight {
+      padding-left: 16px;
+      padding-right: 16px;
     }
 
-    div[style*="padding: 48px 0 72px"] {
-      padding: 28px 0 40px !important;
-      gap: 24px !important;
+    .pf-hero-grid {
+      padding: 28px 0 40px;
+      gap: 24px;
     }
 
-    div[style*="padding: 16px"][style*="margin-top: 24px"][style*="border-radius: 28px"] {
-      padding: 18px !important;
+    .pf-hero-title {
+      font-size: 38px;
+      line-height: 1.04;
     }
 
-    div[style*="display: flex"][style*="justify-content: space-between"][style*="backdrop-filter: blur(12px)"] {
-      flex-direction: column !important;
-      align-items: stretch !important;
-      gap: 18px !important;
+    .pf-section-title {
+      font-size: 30px;
+      line-height: 1.08;
     }
 
-    div[style*="display: flex"][style*="gap: 24px"][style*="align-items: center"][style*="flex-wrap: wrap"] {
-      justify-content: center !important;
-      gap: 16px !important;
+    .pf-results-title {
+      font-size: 30px;
+      line-height: 1.08;
     }
 
-    a[style*="padding: 12px 16px"][style*="border-radius: 16px"] {
-      width: 100% !important;
-      text-align: center !important;
+    .pf-hero-text,
+    .pf-section-text,
+    .pf-results-text {
+      font-size: 16px;
     }
 
-    div[style*="gap: 24px"][style*="flex-wrap: wrap"] {
-      gap: 12px !important;
-      justify-content: flex-start !important;
+    .pf-preview-top,
+    .pf-preview-wrap,
+    .pf-form-card,
+    .pf-side-card,
+    .pf-quote-card,
+    .pf-price-card,
+    .pf-results-card,
+    .pf-for-you-card,
+    .pf-big-card,
+    .pf-mini-card {
+      padding: 18px;
+      border-radius: 24px;
     }
 
-    div[style*="margin-top: 28px"][style*="flex-wrap: wrap"] {
-      flex-direction: column !important;
-      align-items: stretch !important;
-      gap: 12px !important;
+    .pf-preview-title {
+      font-size: 24px;
+      line-height: 1.08;
     }
 
-    div[style*="margin-top: 28px"][style*="flex-wrap: wrap"] > a {
-      width: 100% !important;
-      text-align: center !important;
+    .pf-preview-item,
+    .pf-full-plan-item {
+      flex-direction: column;
+      gap: 12px;
     }
 
-    div[style*="margin-top: 20px"][style*="flex-wrap: wrap"] {
-      gap: 8px !important;
+    .pf-time-box {
+      min-width: 0;
+      width: fit-content;
+      max-width: 100%;
+      padding: 10px 14px;
     }
 
-    div[style*="border-radius: 30px"][style*="padding: 24px"][style*="linear-gradient(135deg, #0ea5e9, #22d3ee 45%, #111827)"] {
-      padding: 18px !important;
-      border-radius: 24px !important;
+    .pf-hero-buttons,
+    .pf-button-row,
+    .pf-download-actions,
+    .pf-results-bottom-actions {
+      flex-direction: column;
+      align-items: stretch;
     }
 
-    div[style*="font-size: 30px"][style*="font-weight: 800"][style*="line-height: 1.1"] {
-      font-size: 24px !important;
-      line-height: 1.08 !important;
+    .pf-primary-btn,
+    .pf-secondary-btn,
+    .pf-dark-btn,
+    .pf-secondary-button,
+    .pf-ghost-button,
+    .pf-header-cta {
+      width: 100%;
     }
 
-    div[style*="min-height: 52px"] {
-      min-height: unset !important;
-      font-size: 14px !important;
-      line-height: 1.6 !important;
+    .pf-form-grid,
+    .pf-summary-grid-two,
+    .pf-summary-grid-four,
+    .pf-locked-feature-grid,
+    .pf-metrics-grid {
+      grid-template-columns: 1fr;
     }
 
-    div[style*="margin-top: 18px"][style*="border-radius: 30px"][style*="padding: 18px"] {
-      padding: 14px !important;
-      border-radius: 24px !important;
+    .pf-price-value {
+      font-size: 42px;
     }
 
-    div[style*="grid-template-columns: repeat(2, minmax(0,1fr))"] {
-      grid-template-columns: 1fr !important;
+    .pf-mini-proof {
+      flex-direction: column;
     }
 
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] {
-      grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    .pf-checkbox-row {
+      align-items: flex-start;
     }
 
-    div[style*="grid-template-columns: repeat(3, minmax(0,1fr))"][style*="margin-bottom: 14px"] > div:last-child {
-      grid-column: 1 / -1 !important;
-    }
-
-    div[style*="background: #fafafa"][style*="border-radius: 20px"][style*="padding: 14px"] {
-      padding: 16px !important;
-      min-height: 120px !important;
-    }
-
-    div[style*="margin-top: 8px"][style*="font-weight: 800"][style*="font-size: 18px"] {
-      font-size: 17px !important;
-      line-height: 1.25 !important;
-      word-break: normal !important;
-      overflow-wrap: anywhere !important;
-    }
-
-    div[style*="display: flex"][style*="border-radius: 24px"][style*="margin-bottom: 12px"] {
-      flex-direction: column !important;
-      gap: 12px !important;
-    }
-
-    div[style*="min-width: 92px"][style*="background: #09090b"] {
-      min-width: 0 !important;
-      width: fit-content !important;
-      padding: 10px 14px !important;
-    }
-
-    div[style*="font-size: 18px"][style*="line-height: 1.4"][style*="font-weight: 800"] {
-      font-size: 16px !important;
-      line-height: 1.35 !important;
-      word-break: break-word !important;
-    }
-
-    div[style*="padding: 18px"][style*="margin-top: 6px"][style*="border-radius: 28px"] {
-      padding: 16px !important;
-      border-radius: 22px !important;
-    }
-
-    button[style*="margin-top: 12px"][style*="border-radius: 18px"],
-    button[style*="width: 100%"][style*="border-radius: 18px"],
-    button[style*="cursor: pointer"][style*="border-radius: 18px"],
-    a[style*="padding: 16px 22px"][style*="border-radius: 18px"] {
-      width: 100% !important;
-      text-align: center !important;
-    }
-
-    div[style*="display: grid"][style*="gap: 26px"][style*="align-items: center"] {
-      grid-template-columns: 1fr !important;
-      gap: 18px !important;
-    }
-
-    div[style*="padding: 26px"][style*="border-radius: 30px"][style*="linear-gradient(135deg, #ffffff, #fafafa)"] {
-      padding: 18px !important;
-      border-radius: 24px !important;
-    }
-
-    div[style*="padding: 14px 0"][style*="font-size: 16px"][style*="line-height: 1.7"] {
-      font-size: 15px !important;
-      line-height: 1.6 !important;
-    }
-
-    div[style*="display: grid"][style*="gap: 16px"] {
-      grid-template-columns: 1fr !important;
-    }
-
-    div[style*="border-radius: 24px"][style*="padding: 20px"][style*="background: white"] {
-      padding: 18px !important;
-    }
-
-    div[style*="font-size: 18px"][style*="font-weight: 800"] {
-      font-size: 16px !important;
-      line-height: 1.25 !important;
-      word-break: break-word !important;
-    }
-
-    div[style*="margin: 12px 0 0"][style*="font-size: 46px"] {
-      font-size: 30px !important;
-      line-height: 1.08 !important;
-    }
-
-    div[style*="padding: 24px"][style*="border-radius: 32px"] {
-      padding: 18px !important;
-      border-radius: 24px !important;
-    }
-
-    label[style*="display: block"][style*="font-size: 14px"] {
-      margin-bottom: 8px !important;
-    }
-
-    input, select {
-      height: 56px !important;
-      min-height: 56px !important;
-      padding: 0 14px !important;
-      font-size: 16px !important;
-    }
-
-    input[type="time"] {
-      height: 56px !important;
-      min-height: 56px !important;
-      padding: 0 14px !important;
-      line-height: 56px !important;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-
-    label[style*="padding: 16px"][style*="border-radius: 18px"] {
-      align-items: flex-start !important;
-    }
-
-    div[style*="gap: 14px"][style*="flex-wrap: wrap"][style*="margin-top: 18px"] {
-      flex-direction: column !important;
-      align-items: stretch !important;
-    }
-
-    div[style*="gap: 14px"][style*="flex-wrap: wrap"][style*="margin-top: 18px"] > button {
-      width: 100% !important;
-    }
-
-    section[style*="padding: 72px 0"] {
-      padding: 48px 0 !important;
-    }
-
-    div[style*="padding: 34px"][style*="border-radius: 36px"] {
-      padding: 22px !important;
-      border-radius: 24px !important;
-    }
-
-    div[style*="font-size: 56px"][style*="font-weight: 900"] {
-      font-size: 42px !important;
+    .pf-input {
+      min-height: 56px;
+      height: 56px;
+      padding: 0 14px;
+      font-size: 16px;
     }
   }
 `;
