@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 
 const checkoutLinks = {
   instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
@@ -2336,6 +2337,7 @@ export default function PeakFuelWebsite() {
           leadMessage={leadMessage}
         />
       )}
+      <Analytics />
     </div>
   );
 }
