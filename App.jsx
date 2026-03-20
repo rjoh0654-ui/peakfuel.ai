@@ -4,7 +4,7 @@ const checkoutLinks = {
   instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
 };
 
-const STORAGE_KEY = "peakfuel_checkout_plan_v7";
+const STORAGE_KEY = "peakfuel_checkout_plan_v8";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -17,6 +17,11 @@ const sports = [
   ["volleyball", "Volleyball"],
   ["tennis", "Tennis"],
   ["other", "Other"],
+];
+
+const sexOptions = [
+  ["male", "Male"],
+  ["female", "Female"],
 ];
 
 const goals = [
@@ -128,6 +133,24 @@ const weatherOptions = [
   ["hot", "Hot / high sweat conditions"],
 ];
 
+const sessionCountOptions = [
+  ["1", "1 session"],
+  ["2", "2 sessions"],
+  ["3", "3 sessions"],
+];
+
+const sleepQualityOptions = [
+  ["poor", "Poor / inconsistent"],
+  ["okay", "Okay"],
+  ["good", "Good / consistent"],
+];
+
+const wakeDifficultyOptions = [
+  ["easy", "Wake up easily"],
+  ["medium", "A little tired"],
+  ["hard", "Usually exhausted"],
+];
+
 const planTiers = [
   {
     key: "instant",
@@ -135,13 +158,14 @@ const planTiers = [
     price: "$4.99",
     badge: "Instant access",
     description:
-      "A personalized daily fueling system built around your actual schedule, training load, hydration, digestion, and recovery needs.",
+      "A personalized daily fueling system built around your actual schedule, session load, hydration, digestion, sleep, and recovery needs.",
     features: [
       "Exact calorie + macro targets",
       "Hydration target in ounces",
       "Meal timing around your real day",
       "Pre, during, and post-workout system",
       "Competition / meet day version",
+      "Sleep target + recovery guidance",
       "Save, print, and download included",
     ],
   },
@@ -173,6 +197,18 @@ function formatTime(totalMinutes) {
   return `${hours}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
+function displayTimeToMinutes(displayTime) {
+  if (!displayTime) return 0;
+  const match = displayTime.match(/(\d+):(\d+)\s(AM|PM)/);
+  if (!match) return 0;
+  let h = Number(match[1]);
+  const m = Number(match[2]);
+  const suffix = match[3];
+  if (suffix === "PM" && h !== 12) h += 12;
+  if (suffix === "AM" && h === 12) h = 0;
+  return h * 60 + m;
+}
+
 function niceSportLabel(sport) {
   const found = sports.find(([value]) => value === sport);
   return found ? found[1] : "Athlete";
@@ -182,6 +218,7 @@ function calcProgress(form) {
   const importantFields = [
     "email",
     "sport",
+    "sex",
     "goal",
     "ageRange",
     "weight",
@@ -203,6 +240,9 @@ function calcProgress(form) {
     "appetite",
     "sessionGoal",
     "weatherLoad",
+    "sessionCount",
+    "sleepQuality",
+    "wakeDifficulty",
   ];
 
   const completed = importantFields.filter((key) => {
@@ -217,6 +257,7 @@ function calcProgress(form) {
 function hasUserCustomized(form) {
   const defaults = {
     sport: "swimming",
+    sex: "male",
     goal: "perform",
     weight: "150",
     intensity: "hard",
@@ -226,6 +267,8 @@ function hasUserCustomized(form) {
     currentHydration: "okay",
     stomachSensitivity: "normal",
     sessionGoal: "normal",
+    sessionCount: "1",
+    sleepQuality: "okay",
   };
 
   return Object.entries(defaults).some(([key, value]) => form[key] !== value);
@@ -234,8 +277,11 @@ function hasUserCustomized(form) {
 function getCalories(form) {
   const weight = safeNumber(form.weight, 150);
   const duration = safeNumber(form.duration, 90);
+  const secondDuration = safeNumber(form.secondSessionDuration, 60);
+  const thirdDuration = safeNumber(form.thirdSessionDuration, 45);
+  const sessionCount = safeNumber(form.sessionCount, 1);
 
-  let calories = weight * 15;
+  let calories = weight * (form.sex === "female" ? 14 : 15);
 
   if (form.sport === "swimming") calories += 120;
   if (form.trainingType === "endurance") calories += 170;
@@ -245,26 +291,40 @@ function getCalories(form) {
   if (form.sessionGoal === "race") calories += 80;
   if (duration >= 90) calories += 110;
   if (duration >= 120) calories += 150;
-  if (form.doubleDay) calories += 320;
+
+  if (sessionCount >= 2) calories += Math.round(secondDuration * 3.2);
+  if (sessionCount >= 3) calories += Math.round(thirdDuration * 2.6);
+
+  if (form.doubleDay) calories += 220;
   if (form.competitionFrequency === "often") calories += 80;
   if (form.weatherLoad === "hot") calories += 40;
   if (form.goal === "gain") calories += 260;
   if (form.goal === "lean") calories -= 180;
   if (form.soreness === "high") calories += 70;
+  if (form.sleepQuality === "poor") calories += 40;
 
   return Math.round(calories);
 }
 
 function getProteinGrams(form) {
   const weight = safeNumber(form.weight, 150);
-  if (form.goal === "gain") return Math.round(weight * 0.98);
-  if (form.goal === "lean") return Math.round(weight * 0.92);
-  if (form.trainingType === "power") return Math.round(weight * 0.95);
-  return Math.round(weight * 0.86);
+  const sessionCount = safeNumber(form.sessionCount, 1);
+
+  let base = 0.86;
+
+  if (form.goal === "gain") base = 0.98;
+  if (form.goal === "lean") base = 0.92;
+  if (form.trainingType === "power") base = 0.95;
+  if (sessionCount >= 2) base += 0.06;
+  if (form.soreness === "high") base += 0.04;
+
+  return Math.round(weight * base);
 }
 
 function getCarbGrams(form, calories, protein) {
   const weight = safeNumber(form.weight, 150);
+  const sessionCount = safeNumber(form.sessionCount, 1);
+
   let carbs = Math.round(weight * 2.0);
 
   if (form.sport === "swimming") carbs += 25;
@@ -272,7 +332,8 @@ function getCarbGrams(form, calories, protein) {
   if (form.intensity === "hard") carbs += 25;
   if (form.intensity === "very-hard") carbs += 55;
   if (form.sessionGoal === "race") carbs += 25;
-  if (form.doubleDay) carbs += 45;
+  if (sessionCount >= 2) carbs += 50;
+  if (sessionCount >= 3) carbs += 35;
   if (form.goal === "gain") carbs += 25;
   if (form.goal === "lean") carbs -= 20;
   if (form.competitionFrequency === "often") carbs += 20;
@@ -290,13 +351,17 @@ function getFatGrams(calories, protein, carbs) {
 
 function getHydrationOunces(form) {
   const weight = safeNumber(form.weight, 150);
+  const sessionCount = safeNumber(form.sessionCount, 1);
+
   let ounces = Math.round(weight * 0.6);
 
   if (form.intensity === "hard") ounces += 12;
   if (form.intensity === "very-hard") ounces += 18;
   if (safeNumber(form.duration, 90) >= 90) ounces += 8;
   if (safeNumber(form.duration, 90) >= 120) ounces += 8;
-  if (form.doubleDay) ounces += 20;
+  if (sessionCount >= 2) ounces += 18;
+  if (sessionCount >= 3) ounces += 14;
+  if (form.doubleDay) ounces += 12;
   if (form.currentHydration === "low") ounces += 10;
   if (form.sweatRate === "heavy") ounces += 14;
   if (form.weatherLoad === "hot") ounces += 12;
@@ -305,11 +370,14 @@ function getHydrationOunces(form) {
 }
 
 function getDuringTrainingHydration(form) {
+  const sessionCount = safeNumber(form.sessionCount, 1);
+
   if (
     form.sweatRate === "heavy" ||
     form.intensity === "very-hard" ||
     form.doubleDay ||
-    form.weatherLoad === "hot"
+    form.weatherLoad === "hot" ||
+    sessionCount >= 2
   ) {
     return "18–30 oz per hour + electrolytes";
   }
@@ -320,23 +388,32 @@ function getDuringTrainingHydration(form) {
 }
 
 function getElectrolyteNote(form) {
+  const sessionCount = safeNumber(form.sessionCount, 1);
+
   if (form.sweatRate === "heavy" || form.weatherLoad === "hot") {
     return "Use electrolytes consistently on long, hot, or high-sweat sessions.";
   }
-  if (form.intensity === "very-hard" || form.doubleDay) {
-    return "Electrolytes are useful on bigger sessions instead of relying on plain water only.";
+  if (form.intensity === "very-hard" || form.doubleDay || sessionCount >= 2) {
+    return "Electrolytes are useful on bigger training days instead of relying on plain water only.";
   }
   return "Plain water is fine on easier sessions, but electrolytes help when sweat losses are higher.";
 }
 
 function getCarbFocus(form) {
+  const sessionCount = safeNumber(form.sessionCount, 1);
+
   if (form.goal === "lean") {
     return "Keep the biggest carb blocks around training, recovery, and your highest-output parts of the day.";
   }
   if (form.goal === "gain") {
     return "Push carbs hardest before training, after training, and again later in the day so growth and recovery stay supported.";
   }
-  if (form.trainingType === "endurance" || form.sport === "swimming" || form.intensity === "very-hard") {
+  if (
+    form.trainingType === "endurance" ||
+    form.sport === "swimming" ||
+    form.intensity === "very-hard" ||
+    sessionCount >= 2
+  ) {
     return "Spread carbs steadily across the day so you do not arrive at practice already low on energy.";
   }
   return "Center carbs around training and recovery while keeping earlier meals balanced.";
@@ -351,15 +428,17 @@ function getGoalPhrase(goal) {
 
 function getPreviewSummary(form) {
   if (!hasUserCustomized(form)) {
-    return "Built around your sport, schedule, training load, and performance goal.";
+    return "Built around your sport, schedule, session load, hydration needs, and recovery goal.";
   }
 
   const sport = niceSportLabel(form.sport).toLowerCase();
   const practiceTime = formatTime(toMinutes(form.practiceTime) ?? 945);
+  const sessionCount = safeNumber(form.sessionCount, 1);
+  const sessionLabel = sessionCount === 1 ? "1 session" : `${sessionCount} sessions`;
 
-  return `Built for a ${form.weight || "150"} lb ${sport} athlete focused on ${getGoalPhrase(
+  return `Built for a ${form.weight || "150"} lb ${form.sex || "male"} ${sport} athlete focused on ${getGoalPhrase(
     form.goal
-  )}, with ${form.intensity.replace("-", " ")} training around ${practiceTime}.`;
+  )}, with ${form.intensity.replace("-", " ")} training, ${sessionLabel}, and a main session around ${practiceTime}.`;
 }
 
 function getThisIsForYouItems(form) {
@@ -367,7 +446,7 @@ function getThisIsForYouItems(form) {
   return [
     `You train hard in ${sport} but still guess what to eat before training.`,
     "You want something more useful than generic 'eat healthy' advice.",
-    "You need fueling that fits school, practice, lifting, and recovery.",
+    "You need fueling that fits school, practice, lifting, multiple sessions, and recovery.",
     "You want a plan that feels specific enough to actually save and use.",
   ];
 }
@@ -445,13 +524,17 @@ function getPlanScore(form) {
   if (form.currentHydration === "low") score -= 4;
   if (form.breakfastHabit === "rarely") score -= 4;
   if (form.soreness === "high") score -= 4;
-  if (form.doubleDay) score -= 3;
+  if (safeNumber(form.sessionCount, 1) >= 2) score -= 3;
+  if (form.doubleDay) score -= 2;
   if (form.goal === "gain" && form.appetite === "low") score -= 2;
+  if (form.sleepQuality === "poor") score -= 4;
+  if (form.wakeDifficulty === "hard") score -= 2;
   return clamp(score, 72, 95);
 }
 
 function getPriorityBullets(form) {
   const bullets = [];
+  const sessionCount = safeNumber(form.sessionCount, 1);
 
   if (form.breakfastHabit === "rarely") {
     bullets.push("Your first win is eating earlier so you stop trying to catch up late in the day.");
@@ -468,14 +551,17 @@ function getPriorityBullets(form) {
   if (form.goal === "lean") {
     bullets.push("You still need strong training fuel. The goal is smarter timing, not flat low-energy days.");
   }
-  if (form.doubleDay || form.intensity === "very-hard") {
+  if (form.doubleDay || form.intensity === "very-hard" || sessionCount >= 2) {
     bullets.push("Your workload is high enough that a normal school-day eating pattern will usually leave you underfueled.");
   }
   if (form.weatherLoad === "hot" || form.sweatRate === "heavy") {
     bullets.push("Your sweat losses are meaningful enough that fluids and electrolytes matter, not just total food.");
   }
+  if (form.sleepQuality === "poor" || form.wakeDifficulty === "hard") {
+    bullets.push("Your sleep and recovery habits need to support your fuel plan or training quality will still feel flat.");
+  }
   if (!bullets.length) {
-    bullets.push("Your biggest edge is turning decent habits into more consistent timing, hydration, and recovery.");
+    bullets.push("Your biggest edge is turning decent habits into more consistent timing, hydration, recovery, and sleep.");
   }
 
   return bullets.slice(0, 4);
@@ -483,13 +569,15 @@ function getPriorityBullets(form) {
 
 function getTrainingRiskFlags(form) {
   const flags = [];
+  const sessionCount = safeNumber(form.sessionCount, 1);
 
   if (form.breakfastHabit === "rarely") flags.push("You may be entering the afternoon already behind on fuel.");
   if (form.currentHydration === "low") flags.push("Low hydration habits increase the chance of flat sessions and slower recovery.");
   if (form.digestTolerance === "poor") flags.push("Poor digestion before training means meal timing matters more for you.");
-  if (form.doubleDay) flags.push("Heavy workload increases the chance of underfueling if you eat like a normal day.");
+  if (form.doubleDay || sessionCount >= 2) flags.push("Heavy workload increases the chance of underfueling if you eat like a normal day.");
   if (form.soreness === "high") flags.push("High soreness is a sign recovery quality needs to improve.");
   if (form.sweatRate === "heavy") flags.push("Heavy sweat losses raise fluid and sodium needs.");
+  if (form.sleepQuality === "poor") flags.push("Poor sleep can reduce recovery quality even if food intake improves.");
   if (!flags.length) flags.push("Main opportunity: improve consistency rather than making huge changes.");
 
   return flags.slice(0, 4);
@@ -497,9 +585,13 @@ function getTrainingRiskFlags(form) {
 
 function getFuelTimingNotes(form) {
   const notes = [];
+  const sessionCount = safeNumber(form.sessionCount, 1);
 
   if (form.practiceTime) {
     notes.push(`Your plan is centered around training at ${formatTime(toMinutes(form.practiceTime))}.`);
+  }
+  if (sessionCount >= 2) {
+    notes.push("Your timing includes extra fuel and recovery because multiple sessions create a bigger total demand.");
   }
   if (form.stomachSensitivity === "sensitive") {
     notes.push("The pre-workout section stays lighter because your stomach tolerance matters.");
@@ -517,12 +609,56 @@ function getFuelTimingNotes(form) {
   return notes.slice(0, 4);
 }
 
+function getSleepGoal(form) {
+  const bed = toMinutes(form.bedTime) ?? 1350;
+  const wake = toMinutes(form.wakeTime) ?? 390;
+
+  let sleepMinutes = wake - bed;
+  if (sleepMinutes <= 0) sleepMinutes += 1440;
+
+  let targetLow = 8;
+  let targetHigh = 10;
+
+  if (form.ageRange === "19-22" || form.ageRange === "23+") {
+    targetLow = 8;
+    targetHigh = 9;
+  }
+
+  const actualHours = (sleepMinutes / 60).toFixed(1);
+
+  let scoreNote = "Your sleep window is decent, but consistency still matters.";
+  if (sleepMinutes < targetLow * 60) {
+    scoreNote = "Your current sleep window looks short for your training load, so recovery may lag even if food is solid.";
+  } else if (form.sleepQuality === "poor" || form.wakeDifficulty === "hard") {
+    scoreNote = "Your total time may be okay, but sleep quality looks like a recovery limiter.";
+  }
+
+  return {
+    actual: `${actualHours} hrs currently scheduled`,
+    target: `${targetLow}–${targetHigh} hrs/night`,
+    note: scoreNote,
+    actions: [
+      "Aim to keep bedtime and wake time within about 30 minutes day to day.",
+      "Finish your biggest meal at least 2 hours before bed when possible.",
+      "Use a lighter protein-focused snack pre-bed if recovery intake is low.",
+      "Reduce late caffeine if sleep quality is inconsistent.",
+    ],
+  };
+}
+
 function buildPlan(form) {
   const wake = toMinutes(form.wakeTime) ?? 390;
   const school = toMinutes(form.schoolStart) ?? 480;
   const practice = toMinutes(form.practiceTime) ?? 945;
   const bed = toMinutes(form.bedTime) ?? 1350;
   const duration = safeNumber(form.duration, 90);
+
+  const secondPractice = toMinutes(form.secondSessionTime);
+  const thirdPractice = toMinutes(form.thirdSessionTime);
+  const secondDuration = safeNumber(form.secondSessionDuration, 60);
+  const thirdDuration = safeNumber(form.thirdSessionDuration, 45);
+  const sessionCount = safeNumber(form.sessionCount, 1);
+  const sleepGoal = getSleepGoal(form);
 
   const calories = getCalories(form);
   const protein = getProteinGrams(form);
@@ -534,6 +670,10 @@ function buildPlan(form) {
 
   const preFoods = preWorkoutFoods(form);
   const recoveryFoods = postWorkoutFoods(form.goal);
+  const secondRecoveryTime =
+    secondPractice != null ? formatTime(secondPractice + secondDuration + 15) : "";
+  const thirdRecoveryTime =
+    thirdPractice != null ? formatTime(thirdPractice + thirdDuration + 15) : "";
 
   const athleteType = niceSportLabel(form.sport);
   const title =
@@ -546,7 +686,7 @@ function buildPlan(form) {
 
   const whyThisWorks =
     form.goal === "gain"
-      ? "This system increases total fuel, recovery carbs, and protein timing so you can train hard without falling behind on growth and recovery."
+      ? "This system increases total fuel, recovery carbs, protein timing, and late-day support so you can train hard without falling behind on growth and recovery."
       : form.goal === "lean"
         ? "This system keeps protein high, places carbs where they help performance most, and avoids the classic mistake of underfueling before training."
         : "This system spreads your fuel more intentionally across the day so you can show up to training with better energy, recover faster, and avoid late-day crashes.";
@@ -618,13 +758,13 @@ function buildPlan(form) {
       title: "During Training Strategy",
       desc: "Do not wait until you feel flat. Your hydration should already be working for you.",
       macros:
-        form.doubleDay || form.intensity === "very-hard" || duration >= 100
+        sessionCount >= 2 || form.doubleDay || form.intensity === "very-hard" || duration >= 100
           ? "Add carbs during long or very hard sessions if energy drops"
           : "Hydration-first approach",
       hydration: `During training: ${duringTraining}`,
       why: "This keeps performance steadier when total output, heat, or sweat losses are higher.",
       examples:
-        form.intensity === "very-hard" || form.doubleDay || duration >= 100
+        form.intensity === "very-hard" || form.doubleDay || duration >= 100 || sessionCount >= 2
           ? ["water bottle", "electrolytes", "sports drink if needed"]
           : ["water bottle", "electrolytes if you sweat heavily"],
     },
@@ -640,9 +780,10 @@ function buildPlan(form) {
     {
       time: dinnerTime,
       title: "Dinner — Recovery + Reset",
-      desc: form.doubleDay
-        ? "Go bigger here. Heavy days need carbs, protein, fluids, and enough total intake to actually recover."
-        : "Finish with a full balanced meal that supports recovery, sleep, and tomorrow’s training.",
+      desc:
+        form.doubleDay || sessionCount >= 2
+          ? "Go bigger here. Heavy days need carbs, protein, fluids, and enough total intake to actually recover."
+          : "Finish with a full balanced meal that supports recovery, sleep, and tomorrow’s training.",
       macros: `Target: ~${dinnerCarbs}g carbs + ${dinnerProtein}g protein`,
       hydration: "Hydration: Finish the rest of your daily target",
       why: "Dinner closes the recovery gap and prevents waking up already behind.",
@@ -662,7 +803,54 @@ function buildPlan(form) {
     });
   }
 
-  if (form.goal === "gain" || form.soreness === "high") {
+  if (sessionCount >= 2 && secondPractice != null) {
+    items.push({
+      time: formatTime(Math.max(secondPractice - 60, 0)),
+      title: "Session 2 Pre-Fuel",
+      desc: "Because you have more than one session, this second pre-fuel block matters. Do not rely on your earlier meals to still carry you.",
+      macros: `Target: ~${Math.round(carbs * 0.1)}g carbs + ${Math.round(protein * 0.08)}g protein`,
+      hydration: "Hydration: 10–16 oz + electrolytes if sweat losses are high",
+      why: "Second sessions usually feel worse when the first session already drained carbs and fluids.",
+      examples:
+        form.stomachSensitivity === "sensitive"
+          ? ["banana", "applesauce", "pretzels", "sports drink"]
+          : ["bagel", "granola bar", "fruit", "Greek yogurt"],
+    });
+
+    items.push({
+      time: secondRecoveryTime,
+      title: "Session 2 Recovery",
+      desc: "This recovery block keeps your full-day workload from turning into a slow recovery spiral.",
+      macros: `Target: ~${Math.round(carbs * 0.14)}g carbs + ${Math.round(protein * 0.16)}g protein`,
+      hydration: "Hydration: 16–24 oz + sodium if you were a heavy sweater",
+      why: "Multi-session athletes usually under-recover between sessions and end up flat the next day.",
+      examples: postWorkoutFoods(form.goal),
+    });
+  }
+
+  if (sessionCount >= 3 && thirdPractice != null) {
+    items.push({
+      time: formatTime(Math.max(thirdPractice - 45, 0)),
+      title: "Session 3 Top-Up",
+      desc: "At this point the goal is simple digestion and fast energy, not a heavy meal.",
+      macros: `Target: ~${Math.round(carbs * 0.07)}g carbs`,
+      hydration: "Hydration: 8–12 oz",
+      why: "Small, easy fuel works better than trying to squeeze in a full meal too late.",
+      examples: ["banana", "sports drink", "rice cakes", "pretzels"],
+    });
+
+    items.push({
+      time: thirdRecoveryTime,
+      title: "Session 3 Recovery",
+      desc: "Finish the day by replacing fluids, carbs, and protein quickly so tomorrow does not start behind.",
+      macros: `Target: ~${Math.round(carbs * 0.12)}g carbs + ${Math.round(protein * 0.14)}g protein`,
+      hydration: "Hydration: 16–24 oz",
+      why: "Late recovery matters more when total daily output is stacked.",
+      examples: postWorkoutFoods(form.goal),
+    });
+  }
+
+  if (form.goal === "gain" || form.soreness === "high" || form.sleepQuality === "poor") {
     items.push({
       time: preBedTime,
       title: "Pre-Bed Recovery Add-On",
@@ -673,6 +861,8 @@ function buildPlan(form) {
       examples: ["Greek yogurt", "milk", "protein shake", "cottage cheese", "toast + yogurt"],
     });
   }
+
+  items.sort((a, b) => displayTimeToMinutes(a.time) - displayTimeToMinutes(b.time));
 
   const groceryList = [
     "bagels / bread / toast",
@@ -712,14 +902,17 @@ function buildPlan(form) {
     "Trying to fix underfueling with one snack right before practice",
     "Using water only when sweat losses are high",
     "Waiting too long after training to start recovery",
-  ];
+    ...(sessionCount >= 2 ? ["Underestimating how much extra fuel a second or third session requires"] : []),
+    ...(form.sleepQuality === "poor" ? ["Ignoring sleep quality while trying to fix performance with food alone"] : []),
+  ].slice(0, 5);
 
   const recoveryTips = [
     `Protein target: ${protein}g/day split across the day instead of all at night.`,
     `Hydration target: ${hydrationOz}–${hydrationOz + 16} oz/day.`,
+    `Sleep target: ${sleepGoal.target}. Current setup: ${sleepGoal.actual}.`,
     `Electrolyte note: ${sweatNote}`,
     form.caffeine === "daily"
-      ? "Be careful not to rely on caffeine to cover up underfueling."
+      ? "Be careful not to rely on caffeine to cover up underfueling or poor sleep."
       : "Do not use caffeine as your whole energy strategy.",
   ];
 
@@ -750,6 +943,7 @@ function buildPlan(form) {
     fuelTimingNotes: getFuelTimingNotes(form),
     planScore: getPlanScore(form),
     electrolyteNote: sweatNote,
+    sleepGoal,
   };
 }
 
@@ -798,6 +992,7 @@ function downloadPlanAsHtml(plan, form) {
         @media print {
           body { padding: 0; }
           .top { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .grid { grid-template-columns: repeat(2, 1fr); }
         }
       </style>
     </head>
@@ -821,6 +1016,14 @@ function downloadPlanAsHtml(plan, form) {
           <p><strong>Daily target:</strong> ${plan.hydrationTarget}</p>
           <p><strong>During training:</strong> ${plan.duringTraining}</p>
           <p>${plan.electrolyteNote}</p>
+        </div>
+
+        <div class="section">
+          <h2>Sleep target</h2>
+          <p><strong>Target:</strong> ${plan.sleepGoal.target}</p>
+          <p><strong>Current setup:</strong> ${plan.sleepGoal.actual}</p>
+          <p>${plan.sleepGoal.note}</p>
+          <ul>${plan.sleepGoal.actions.map((item) => `<li>${item}</li>`).join("")}</ul>
         </div>
 
         <div class="section">
@@ -903,6 +1106,12 @@ HYDRATION
 Daily target: ${plan.hydrationTarget}
 During training: ${plan.duringTraining}
 Electrolytes: ${plan.electrolyteNote}
+
+SLEEP
+Target: ${plan.sleepGoal.target}
+Current setup: ${plan.sleepGoal.actual}
+Sleep note: ${plan.sleepGoal.note}
+${plan.sleepGoal.actions.map((x, i) => `${i + 1}. ${x}`).join("\n")}
 
 MAIN PRIORITIES
 ${plan.priorityBullets.map((x, i) => `${i + 1}. ${x}`).join("\n")}
@@ -995,6 +1204,12 @@ function printPlan(plan) {
           <p><strong>During training:</strong> ${plan.duringTraining}</p>
         </div>
         <div class="box">
+          <h2>Sleep</h2>
+          <p><strong>Target:</strong> ${plan.sleepGoal.target}</p>
+          <p><strong>Current setup:</strong> ${plan.sleepGoal.actual}</p>
+          <p>${plan.sleepGoal.note}</p>
+        </div>
+        <div class="box">
           <h2>Daily schedule</h2>
           ${plan.items
             .map(
@@ -1083,8 +1298,8 @@ function LandingPage({
 
               <p className="pf-hero-text">
                 PeakFuel builds a specific daily fueling structure based on your
-                sport, schedule, practice time, digestion, hydration, sweat rate,
-                and performance goal.
+                sport, sex, schedule, number of sessions, practice time, digestion,
+                hydration, sweat rate, sleep, and performance goal.
               </p>
 
               <div className="pf-hero-buttons">
@@ -1155,14 +1370,15 @@ function LandingPage({
                   <div className="pf-locked-title">Unlock your full fuel system</div>
                   <div className="pf-locked-text">
                     Get your full day structure, exact macros, hydration target,
-                    competition version, recovery system, grocery ideas, and save / download tools.
+                    sleep goal, competition version, recovery system, grocery ideas,
+                    and save / download tools.
                   </div>
 
                   <div className="pf-locked-feature-grid">
                     <div className="pf-locked-feature">✓ Exact calories + macros</div>
                     <div className="pf-locked-feature">✓ Hydration in ounces</div>
                     <div className="pf-locked-feature">✓ Competition version</div>
-                    <div className="pf-locked-feature">✓ Save, print, download</div>
+                    <div className="pf-locked-feature">✓ Sleep + recovery goals</div>
                   </div>
 
                   <button onClick={startCheckout} className="pf-dark-btn">
@@ -1182,7 +1398,7 @@ function LandingPage({
               <SectionHeading
                 eyebrow="This is for you"
                 title="Made for athletes who train hard but still end up guessing their nutrition"
-                text="PeakFuel is built for athletes who want their food, hydration, and recovery to actually match their training."
+                text="PeakFuel is built for athletes who want their food, hydration, recovery, and sleep to actually match their training."
               />
             </div>
 
@@ -1203,7 +1419,7 @@ function LandingPage({
           <div className="pf-trust-item">
             <div className="pf-trust-title">Built from real inputs</div>
             <div className="pf-trust-text">
-              Your plan changes based on your training time, duration, hydration habits, stomach tolerance, and sweat rate.
+              Your plan changes based on sex, training time, session count, hydration habits, stomach tolerance, sweat rate, and sleep quality.
             </div>
           </div>
           <div className="pf-trust-item">
@@ -1258,6 +1474,18 @@ function LandingPage({
                     className="pf-input"
                   >
                     {sports.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Sex">
+                  <select
+                    value={form.sex}
+                    onChange={(e) => updateField("sex", e.target.value)}
+                    className="pf-input"
+                  >
+                    {sexOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
@@ -1326,6 +1554,18 @@ function LandingPage({
                     className="pf-input"
                     inputMode="numeric"
                   />
+                </Field>
+
+                <Field label="How many training sessions today?">
+                  <select
+                    value={form.sessionCount}
+                    onChange={(e) => updateField("sessionCount", e.target.value)}
+                    className="pf-input"
+                  >
+                    {sessionCountOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
                 </Field>
 
                 <Field label="Training type">
@@ -1410,6 +1650,76 @@ function LandingPage({
                     onChange={(e) => updateField("bedTime", e.target.value)}
                     className="pf-input"
                   />
+                </Field>
+
+                {Number(form.sessionCount) >= 2 ? (
+                  <>
+                    <Field label="Second session time">
+                      <input
+                        type="time"
+                        value={form.secondSessionTime}
+                        onChange={(e) => updateField("secondSessionTime", e.target.value)}
+                        className="pf-input"
+                      />
+                    </Field>
+
+                    <Field label="Second session duration (minutes)">
+                      <input
+                        value={form.secondSessionDuration}
+                        onChange={(e) => updateField("secondSessionDuration", e.target.value)}
+                        placeholder="60"
+                        className="pf-input"
+                        inputMode="numeric"
+                      />
+                    </Field>
+                  </>
+                ) : null}
+
+                {Number(form.sessionCount) >= 3 ? (
+                  <>
+                    <Field label="Third session time">
+                      <input
+                        type="time"
+                        value={form.thirdSessionTime}
+                        onChange={(e) => updateField("thirdSessionTime", e.target.value)}
+                        className="pf-input"
+                      />
+                    </Field>
+
+                    <Field label="Third session duration (minutes)">
+                      <input
+                        value={form.thirdSessionDuration}
+                        onChange={(e) => updateField("thirdSessionDuration", e.target.value)}
+                        placeholder="45"
+                        className="pf-input"
+                        inputMode="numeric"
+                      />
+                    </Field>
+                  </>
+                ) : null}
+
+                <Field label="Sleep quality lately">
+                  <select
+                    value={form.sleepQuality}
+                    onChange={(e) => updateField("sleepQuality", e.target.value)}
+                    className="pf-input"
+                  >
+                    {sleepQualityOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="How do you feel when you wake up?">
+                  <select
+                    value={form.wakeDifficulty}
+                    onChange={(e) => updateField("wakeDifficulty", e.target.value)}
+                    className="pf-input"
+                  >
+                    {wakeDifficultyOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
                 </Field>
 
                 <Field label="Pre-training stomach">
@@ -1580,7 +1890,7 @@ function LandingPage({
                 "Pre, during, and post-workout strategy",
                 "Full daily meal timing structure",
                 "Competition / meet day version",
-                "Recovery notes, grocery list, and quick grab-and-go ideas",
+                "Recovery notes, grocery list, fast grab-and-go ideas, and sleep targets",
               ].map((text) => (
                 <div key={text} className="pf-bullet-row">
                   <span className="pf-bullet-dot">✓</span>
@@ -1599,18 +1909,22 @@ function LandingPage({
             </div>
 
             <div className="pf-side-card">
-              <div className="pf-side-top">Real trust builders</div>
+              <div className="pf-side-top">Why athletes buy this</div>
               <div className="pf-bullet-row">
                 <span className="pf-bullet-dot">✓</span>
-                <span>One-time payment. No subscription.</span>
+                <span>Built around your real day instead of a generic athlete template.</span>
               </div>
               <div className="pf-bullet-row">
                 <span className="pf-bullet-dot">✓</span>
-                <span>Save, print, and download your plan immediately.</span>
+                <span>Accounts for one, two, or three sessions in a day.</span>
               </div>
               <div className="pf-bullet-row">
                 <span className="pf-bullet-dot">✓</span>
-                <span>Built from your own schedule instead of a generic template.</span>
+                <span>Includes food timing, hydration, recovery, and sleep targets.</span>
+              </div>
+              <div className="pf-bullet-row">
+                <span className="pf-bullet-dot">✓</span>
+                <span>One-time payment. Save, print, and download immediately.</span>
               </div>
             </div>
           </div>
@@ -1621,27 +1935,27 @@ function LandingPage({
         <div className="pf-container">
           <SectionHeading
             eyebrow="Trust"
-            title="Clear value. Real personalization. No fake claims."
-            text="This page is built to convert by showing real usefulness, not made-up social proof."
+            title="Built for serious athletes who want specific structure"
+            text="No subscription, no bloated app, and no generic meal-plan fluff. Just a personalized system built around your real training day."
             center
           />
           <div className="pf-proof-grid">
             <div className="pf-proof-card">
-              <div className="pf-proof-title">Real personalization</div>
+              <div className="pf-proof-title">Specific to your actual day</div>
               <div className="pf-proof-text">
-                The builder changes your plan using training time, sweat rate, digestion, hydration habits, and session demands.
+                Your plan changes using sport, sex, body weight, session count, training times, digestion, sweat rate, hydration habits, and recovery needs.
               </div>
             </div>
             <div className="pf-proof-card">
-              <div className="pf-proof-title">Immediate keep-value</div>
+              <div className="pf-proof-title">Built to keep and use</div>
               <div className="pf-proof-text">
-                Customers can save, print, or download the plan right away, which makes it feel like something worth paying for.
+                Save it, print it, or download it immediately so it feels like a real system you can actually follow.
               </div>
             </div>
             <div className="pf-proof-card">
-              <div className="pf-proof-title">Simple, clean offer</div>
+              <div className="pf-proof-title">Simple one-time purchase</div>
               <div className="pf-proof-text">
-                One payment, no subscription, no complicated setup, and a plan that fits phone and desktop.
+                One payment, no subscription, no account wall, and a clean plan that works on phone and desktop.
               </div>
             </div>
           </div>
@@ -1755,6 +2069,18 @@ function ResultsPage({ plan, isPaid, form, savePreview }) {
             </div>
           </div>
 
+          <div className="pf-summary-grid-two">
+            <div className="pf-big-card">
+              <div className="pf-big-title">Sleep target</div>
+              <div className="pf-big-value">{plan.sleepGoal.target}</div>
+              <div className="pf-big-text">Current setup: {plan.sleepGoal.actual}</div>
+            </div>
+            <div className="pf-big-card">
+              <div className="pf-big-title">Sleep recovery note</div>
+              <div className="pf-big-text">{plan.sleepGoal.note}</div>
+            </div>
+          </div>
+
           <div className="pf-why-box">
             <div className="pf-why-title">Why this system works</div>
             <div className="pf-why-text">{plan.whyThisWorks}</div>
@@ -1792,6 +2118,22 @@ function ResultsPage({ plan, isPaid, form, savePreview }) {
             </div>
           </div>
 
+          <div className="pf-summary-grid-two">
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Sleep actions</div>
+              {plan.sleepGoal.actions.map((tip) => (
+                <div key={tip} className="pf-small-result">✓ {tip}</div>
+              ))}
+            </div>
+
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Common mistakes to avoid</div>
+              {plan.commonMistakes.map((item) => (
+                <div key={item} className="pf-small-result">• {item}</div>
+              ))}
+            </div>
+          </div>
+
           <div className="pf-section-block">
             <div className="pf-results-block-title">Your full day schedule</div>
             <div className="pf-full-plan-wrap">
@@ -1825,8 +2167,8 @@ function ResultsPage({ plan, isPaid, form, savePreview }) {
             </div>
 
             <div className="pf-mini-card">
-              <div className="pf-results-block-title">Common mistakes to avoid</div>
-              {plan.commonMistakes.map((item) => (
+              <div className="pf-results-block-title">Quick grocery list</div>
+              {plan.groceryList.map((item) => (
                 <div key={item} className="pf-small-result">• {item}</div>
               ))}
             </div>
@@ -1834,17 +2176,15 @@ function ResultsPage({ plan, isPaid, form, savePreview }) {
 
           <div className="pf-summary-grid-two">
             <div className="pf-mini-card">
-              <div className="pf-results-block-title">Quick grocery list</div>
-              {plan.groceryList.map((item) => (
+              <div className="pf-results-block-title">Fast grab-and-go options</div>
+              {plan.convenienceList.map((item) => (
                 <div key={item} className="pf-small-result">• {item}</div>
               ))}
             </div>
 
             <div className="pf-mini-card">
-              <div className="pf-results-block-title">Fast grab-and-go options</div>
-              {plan.convenienceList.map((item) => (
-                <div key={item} className="pf-small-result">• {item}</div>
-              ))}
+              <div className="pf-results-block-title">Electrolyte note</div>
+              <div className="pf-small-result">{plan.electrolyteNote}</div>
             </div>
           </div>
 
@@ -1865,6 +2205,7 @@ export default function PeakFuelWebsite() {
   const [form, setForm] = useState({
     email: "",
     sport: "swimming",
+    sex: "male",
     goal: "perform",
     ageRange: "16-18",
     weight: "150",
@@ -1876,7 +2217,14 @@ export default function PeakFuelWebsite() {
     wakeTime: "06:30",
     schoolStart: "08:00",
     practiceTime: "15:45",
+    secondSessionTime: "",
+    secondSessionDuration: "60",
+    thirdSessionTime: "",
+    thirdSessionDuration: "45",
+    sessionCount: "1",
     bedTime: "22:30",
+    sleepQuality: "okay",
+    wakeDifficulty: "medium",
     doubleDay: false,
     stomachSensitivity: "normal",
     digestTolerance: "good",
