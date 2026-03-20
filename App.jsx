@@ -4,7 +4,7 @@ const checkoutLinks = {
   instant: "https://buy.stripe.com/3cI6oH0jF4yi4vn6btg3601",
 };
 
-const STORAGE_KEY = "peakfuel_checkout_plan_v6";
+const STORAGE_KEY = "peakfuel_checkout_plan_v7";
 
 const sports = [
   ["swimming", "Swimming"],
@@ -116,6 +116,18 @@ const budgetOptions = [
   ["high", "Flexible budget"],
 ];
 
+const sessionGoalOptions = [
+  ["technical", "Technique / lighter quality"],
+  ["normal", "Normal training"],
+  ["race", "High-quality / race pace / very demanding"],
+];
+
+const weatherOptions = [
+  ["indoor", "Indoor / controlled environment"],
+  ["mild", "Warm or mild outdoor conditions"],
+  ["hot", "Hot / high sweat conditions"],
+];
+
 const planTiers = [
   {
     key: "instant",
@@ -123,20 +135,25 @@ const planTiers = [
     price: "$4.99",
     badge: "Instant access",
     description:
-      "A personalized daily fueling system built around your schedule, training load, recovery needs, and performance goal.",
+      "A personalized daily fueling system built around your actual schedule, training load, hydration, digestion, and recovery needs.",
     features: [
       "Exact calorie + macro targets",
       "Hydration target in ounces",
-      "Meal timing around your actual day",
+      "Meal timing around your real day",
       "Pre, during, and post-workout system",
       "Competition / meet day version",
-      "Recovery notes, grocery ideas, and save / download tools",
+      "Save, print, and download included",
     ],
   },
 ];
 
 function clamp(num, min, max) {
   return Math.max(min, Math.min(max, num));
+}
+
+function safeNumber(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
 }
 
 function toMinutes(time) {
@@ -161,11 +178,6 @@ function niceSportLabel(sport) {
   return found ? found[1] : "Athlete";
 }
 
-function safeNumber(value, fallback) {
-  const num = Number(value);
-  return Number.isFinite(num) && num > 0 ? num : fallback;
-}
-
 function calcProgress(form) {
   const importantFields = [
     "email",
@@ -181,14 +193,16 @@ function calcProgress(form) {
     "practiceTime",
     "bedTime",
     "stomachSensitivity",
+    "digestTolerance",
     "currentHydration",
     "competitionFrequency",
     "eatingPattern",
     "soreness",
     "sweatRate",
-    "digestTolerance",
     "breakfastHabit",
     "appetite",
+    "sessionGoal",
+    "weatherLoad",
   ];
 
   const completed = importantFields.filter((key) => {
@@ -211,6 +225,7 @@ function hasUserCustomized(form) {
     trainingType: "mixed",
     currentHydration: "okay",
     stomachSensitivity: "normal",
+    sessionGoal: "normal",
   };
 
   return Object.entries(defaults).some(([key, value]) => form[key] !== value);
@@ -227,13 +242,14 @@ function getCalories(form) {
   if (form.trainingType === "power") calories += 90;
   if (form.intensity === "hard") calories += 180;
   if (form.intensity === "very-hard") calories += 340;
+  if (form.sessionGoal === "race") calories += 80;
   if (duration >= 90) calories += 110;
   if (duration >= 120) calories += 150;
   if (form.doubleDay) calories += 320;
   if (form.competitionFrequency === "often") calories += 80;
+  if (form.weatherLoad === "hot") calories += 40;
   if (form.goal === "gain") calories += 260;
   if (form.goal === "lean") calories -= 180;
-  if (form.breakfastHabit === "rarely") calories -= 40;
   if (form.soreness === "high") calories += 70;
 
   return Math.round(calories);
@@ -255,6 +271,7 @@ function getCarbGrams(form, calories, protein) {
   if (form.trainingType === "endurance") carbs += 45;
   if (form.intensity === "hard") carbs += 25;
   if (form.intensity === "very-hard") carbs += 55;
+  if (form.sessionGoal === "race") carbs += 25;
   if (form.doubleDay) carbs += 45;
   if (form.goal === "gain") carbs += 25;
   if (form.goal === "lean") carbs -= 20;
@@ -282,12 +299,18 @@ function getHydrationOunces(form) {
   if (form.doubleDay) ounces += 20;
   if (form.currentHydration === "low") ounces += 10;
   if (form.sweatRate === "heavy") ounces += 14;
+  if (form.weatherLoad === "hot") ounces += 12;
 
   return ounces;
 }
 
 function getDuringTrainingHydration(form) {
-  if (form.sweatRate === "heavy" || form.intensity === "very-hard" || form.doubleDay) {
+  if (
+    form.sweatRate === "heavy" ||
+    form.intensity === "very-hard" ||
+    form.doubleDay ||
+    form.weatherLoad === "hot"
+  ) {
     return "18–30 oz per hour + electrolytes";
   }
   if (safeNumber(form.duration, 90) >= 90 || form.intensity === "hard") {
@@ -297,11 +320,11 @@ function getDuringTrainingHydration(form) {
 }
 
 function getElectrolyteNote(form) {
-  if (form.sweatRate === "heavy") {
+  if (form.sweatRate === "heavy" || form.weatherLoad === "hot") {
     return "Use electrolytes consistently on long, hot, or high-sweat sessions.";
   }
   if (form.intensity === "very-hard" || form.doubleDay) {
-    return "Electrolytes are useful on your bigger sessions instead of relying on plain water only.";
+    return "Electrolytes are useful on bigger sessions instead of relying on plain water only.";
   }
   return "Plain water is fine on easier sessions, but electrolytes help when sweat losses are higher.";
 }
@@ -344,8 +367,8 @@ function getThisIsForYouItems(form) {
   return [
     `You train hard in ${sport} but still guess what to eat before training.`,
     "You want something more useful than generic 'eat healthy' advice.",
-    "You need fuel timing that fits school, practice, lifting, and recovery.",
-    "You want better energy, less flat training, and a plan you can actually save and follow.",
+    "You need fueling that fits school, practice, lifting, and recovery.",
+    "You want a plan that feels specific enough to actually save and use.",
   ];
 }
 
@@ -448,11 +471,50 @@ function getPriorityBullets(form) {
   if (form.doubleDay || form.intensity === "very-hard") {
     bullets.push("Your workload is high enough that a normal school-day eating pattern will usually leave you underfueled.");
   }
+  if (form.weatherLoad === "hot" || form.sweatRate === "heavy") {
+    bullets.push("Your sweat losses are meaningful enough that fluids and electrolytes matter, not just total food.");
+  }
   if (!bullets.length) {
     bullets.push("Your biggest edge is turning decent habits into more consistent timing, hydration, and recovery.");
   }
 
   return bullets.slice(0, 4);
+}
+
+function getTrainingRiskFlags(form) {
+  const flags = [];
+
+  if (form.breakfastHabit === "rarely") flags.push("You may be entering the afternoon already behind on fuel.");
+  if (form.currentHydration === "low") flags.push("Low hydration habits increase the chance of flat sessions and slower recovery.");
+  if (form.digestTolerance === "poor") flags.push("Poor digestion before training means meal timing matters more for you.");
+  if (form.doubleDay) flags.push("Heavy workload increases the chance of underfueling if you eat like a normal day.");
+  if (form.soreness === "high") flags.push("High soreness is a sign recovery quality needs to improve.");
+  if (form.sweatRate === "heavy") flags.push("Heavy sweat losses raise fluid and sodium needs.");
+  if (!flags.length) flags.push("Main opportunity: improve consistency rather than making huge changes.");
+
+  return flags.slice(0, 4);
+}
+
+function getFuelTimingNotes(form) {
+  const notes = [];
+
+  if (form.practiceTime) {
+    notes.push(`Your plan is centered around training at ${formatTime(toMinutes(form.practiceTime))}.`);
+  }
+  if (form.stomachSensitivity === "sensitive") {
+    notes.push("The pre-workout section stays lighter because your stomach tolerance matters.");
+  }
+  if (form.sessionGoal === "race") {
+    notes.push("Fueling is slightly more aggressive because your session goal is higher-quality output.");
+  }
+  if (form.goal === "lean") {
+    notes.push("Carbs are concentrated around training so performance stays supported while overall intake stays tighter.");
+  }
+  if (form.goal === "gain") {
+    notes.push("Recovery and total intake are pushed higher so you are not relying on one oversized meal at night.");
+  }
+
+  return notes.slice(0, 4);
 }
 
 function buildPlan(form) {
@@ -496,7 +558,7 @@ function buildPlan(form) {
   const duringTime = formatTime(practice);
   const recoveryTime = formatTime(practice + duration + 15);
   const dinnerTime = formatTime(Math.min(bed - 120, practice + duration + 140));
-  const preBedTime = formatTime(Math.min(bed - 45, dinnerTime ? toMinutes(form.bedTime) - 45 : 1305));
+  const preBedTime = formatTime(Math.min(bed - 45, bed - 45));
 
   const breakfastCarbs = Math.round(carbs * 0.2);
   const breakfastProtein = Math.round(protein * 0.22);
@@ -518,6 +580,7 @@ function buildPlan(form) {
       desc: `Start the day with ${breakfastFoods(form.goal, form.appetite)} so you are not behind before school or training even starts.`,
       macros: `Target: ~${breakfastCarbs}g carbs + ${breakfastProtein}g protein`,
       hydration: "Hydration: 16–20 oz water in the morning",
+      why: "This protects energy earlier in the day and reduces the need to catch up later.",
       examples: ["eggs", "toast", "fruit", "yogurt or oatmeal"],
     },
     {
@@ -526,6 +589,7 @@ function buildPlan(form) {
       desc: "This keeps your energy stable and prevents the classic crash before lunch or training.",
       macros: `Target: ~${snackCarbs}g carbs + ${snackProtein}g protein`,
       hydration: "Hydration: 10–16 oz",
+      why: "A smaller fuel block here helps keep the afternoon from feeling flat.",
       examples:
         form.stomachSensitivity === "sensitive"
           ? ["banana", "applesauce pouch", "crackers", "water"]
@@ -537,6 +601,7 @@ function buildPlan(form) {
       desc: `Build this around ${lunchFoods(form.goal)} so practice is powered by a real meal instead of a last-second snack.`,
       macros: `Target: ~${lunchCarbs}g carbs + ${lunchProtein}g protein`,
       hydration: "Hydration: 16–24 oz before training window",
+      why: "This is your biggest setup meal for training quality and late-day energy.",
       examples: ["rice / pasta / potatoes", "chicken / turkey / beef", "fruit", "water"],
     },
     {
@@ -545,6 +610,7 @@ function buildPlan(form) {
       desc: "Use a lighter carb-focused snack 45–75 minutes before training to sharpen energy without feeling heavy.",
       macros: `Target: ~${topUpCarbs}g carbs`,
       hydration: "Hydration: 8–12 oz",
+      why: "This tops up energy right before training without making your stomach feel overloaded.",
       examples: preFoods,
     },
     {
@@ -556,6 +622,7 @@ function buildPlan(form) {
           ? "Add carbs during long or very hard sessions if energy drops"
           : "Hydration-first approach",
       hydration: `During training: ${duringTraining}`,
+      why: "This keeps performance steadier when total output, heat, or sweat losses are higher.",
       examples:
         form.intensity === "very-hard" || form.doubleDay || duration >= 100
           ? ["water bottle", "electrolytes", "sports drink if needed"]
@@ -567,6 +634,7 @@ function buildPlan(form) {
       desc: "This is where you replace what you used, start muscle repair, and avoid dragging tomorrow's session down.",
       macros: `Target: ~${recoveryCarbs}g carbs + ${recoveryProtein}g protein`,
       hydration: "Hydration: 16–24 oz + sodium if sweaty session",
+      why: "Fast recovery here makes the rest of the day and next training session easier to handle.",
       examples: recoveryFoods,
     },
     {
@@ -577,6 +645,7 @@ function buildPlan(form) {
         : "Finish with a full balanced meal that supports recovery, sleep, and tomorrow’s training.",
       macros: `Target: ~${dinnerCarbs}g carbs + ${dinnerProtein}g protein`,
       hydration: "Hydration: Finish the rest of your daily target",
+      why: "Dinner closes the recovery gap and prevents waking up already behind.",
       examples: ["rice / potatoes / pasta", "protein source", "vegetables", "fruit or dairy"],
     },
   ];
@@ -588,6 +657,7 @@ function buildPlan(form) {
       desc: "Because your workload is higher than normal, you need an added fuel block instead of pretending a standard day is enough.",
       macros: `Target: ~${Math.round(carbs * 0.08)}g carbs + ${Math.round(protein * 0.08)}g protein`,
       hydration: "Hydration: 10–16 oz",
+      why: "This prevents your total intake from falling behind on heavy days.",
       examples: ["bagel", "trail mix", "fruit", "sports drink", "yogurt"],
     });
   }
@@ -599,6 +669,7 @@ function buildPlan(form) {
       desc: "A light protein-focused add-on can help you finish the day without ending up short on recovery.",
       macros: `Target: ~${preBedProtein}g protein`,
       hydration: "Hydration: Small amount of water only if needed",
+      why: "This helps close recovery gaps without needing a huge extra meal.",
       examples: ["Greek yogurt", "milk", "protein shake", "cottage cheese", "toast + yogurt"],
     });
   }
@@ -675,6 +746,8 @@ function buildPlan(form) {
     convenienceList,
     thisIsForYou: getThisIsForYouItems(form),
     priorityBullets: getPriorityBullets(form),
+    trainingRiskFlags: getTrainingRiskFlags(form),
+    fuelTimingNotes: getFuelTimingNotes(form),
     planScore: getPlanScore(form),
     electrolyteNote: sweatNote,
   };
@@ -751,7 +824,7 @@ function downloadPlanAsHtml(plan, form) {
         </div>
 
         <div class="section">
-          <h2>Priority focus</h2>
+          <h2>Main priorities</h2>
           <ul>${plan.priorityBullets.map((item) => `<li>${item}</li>`).join("")}</ul>
         </div>
 
@@ -765,6 +838,7 @@ function downloadPlanAsHtml(plan, form) {
               <p>${item.desc}</p>
               <p><strong>${item.macros}</strong></p>
               <p>${item.hydration}</p>
+              <p><em>${item.why}</em></p>
               <ul>${item.examples.map((example) => `<li>${example}</li>`).join("")}</ul>
             </div>
           `
@@ -788,16 +862,6 @@ function downloadPlanAsHtml(plan, form) {
         <div class="section">
           <h2>Quick grocery list</h2>
           <ul>${plan.groceryList.map((item) => `<li>${item}</li>`).join("")}</ul>
-        </div>
-
-        <div class="section">
-          <h2>Fast grab-and-go options</h2>
-          <ul>${plan.convenienceList.map((item) => `<li>${item}</li>`).join("")}</ul>
-        </div>
-
-        <div class="section">
-          <h2>Common mistakes to avoid</h2>
-          <ul>${plan.commonMistakes.map((item) => `<li>${item}</li>`).join("")}</ul>
         </div>
 
         <div class="section">
@@ -840,8 +904,11 @@ Daily target: ${plan.hydrationTarget}
 During training: ${plan.duringTraining}
 Electrolytes: ${plan.electrolyteNote}
 
-PRIORITY FOCUS
+MAIN PRIORITIES
 ${plan.priorityBullets.map((x, i) => `${i + 1}. ${x}`).join("\n")}
+
+RISK FLAGS
+${plan.trainingRiskFlags.map((x, i) => `${i + 1}. ${x}`).join("\n")}
 
 DAILY SCHEDULE
 ${plan.items
@@ -851,6 +918,7 @@ ${item.time} — ${item.title}
 ${item.desc}
 ${item.macros}
 ${item.hydration}
+Why: ${item.why}
 Examples: ${item.examples.join(", ")}
 `
   )
@@ -864,15 +932,6 @@ After: ${plan.meetGameDay.after}
 
 RECOVERY SYSTEM
 ${plan.recoveryTips.map((x, i) => `${i + 1}. ${x}`).join("\n")}
-
-GROCERY LIST
-${plan.groceryList.map((x) => `- ${x}`).join("\n")}
-
-GRAB-AND-GO
-${plan.convenienceList.map((x) => `- ${x}`).join("\n")}
-
-COMMON MISTAKES
-${plan.commonMistakes.map((x) => `- ${x}`).join("\n")}
 `;
 
   const blob = new Blob([text], { type: "text/plain" });
@@ -944,6 +1003,7 @@ function printPlan(plan) {
             <p>${item.desc}</p>
             <p>${item.macros}</p>
             <p>${item.hydration}</p>
+            <p><strong>Why:</strong> ${item.why}</p>
             <p><strong>Examples:</strong> ${item.examples.join(", ")}</p>
           `
             )
@@ -1022,8 +1082,8 @@ function LandingPage({
               </h1>
 
               <p className="pf-hero-text">
-                PeakFuel builds your actual daily fueling structure based on your
-                sport, schedule, practice time, training load, recovery needs,
+                PeakFuel builds a specific daily fueling structure based on your
+                sport, schedule, practice time, digestion, hydration, sweat rate,
                 and performance goal.
               </p>
 
@@ -1033,9 +1093,9 @@ function LandingPage({
               </div>
 
               <div className="pf-hero-trust-row">
-                <div className="pf-pill">Exact daily structure</div>
-                <div className="pf-pill">Built from your schedule</div>
-                <div className="pf-pill">Save + download included</div>
+                <div className="pf-pill">One-time payment</div>
+                <div className="pf-pill">No subscription</div>
+                <div className="pf-pill">Save, print, and download</div>
               </div>
 
               <div className="pf-mini-proof">
@@ -1095,14 +1155,13 @@ function LandingPage({
                   <div className="pf-locked-title">Unlock your full fuel system</div>
                   <div className="pf-locked-text">
                     Get your full day structure, exact macros, hydration target,
-                    performance notes, competition version, recovery system,
-                    grocery ideas, and save / download tools.
+                    competition version, recovery system, grocery ideas, and save / download tools.
                   </div>
 
                   <div className="pf-locked-feature-grid">
                     <div className="pf-locked-feature">✓ Exact calories + macros</div>
                     <div className="pf-locked-feature">✓ Hydration in ounces</div>
-                    <div className="pf-locked-feature">✓ Meet / game day version</div>
+                    <div className="pf-locked-feature">✓ Competition version</div>
                     <div className="pf-locked-feature">✓ Save, print, download</div>
                   </div>
 
@@ -1142,16 +1201,22 @@ function LandingPage({
       <section className="pf-container-section">
         <div className="pf-trust-strip">
           <div className="pf-trust-item">
-            <div className="pf-trust-title">Built for real schedules</div>
-            <div className="pf-trust-text">School, lifting, practice, dinner, recovery.</div>
+            <div className="pf-trust-title">Built from real inputs</div>
+            <div className="pf-trust-text">
+              Your plan changes based on your training time, duration, hydration habits, stomach tolerance, and sweat rate.
+            </div>
           </div>
           <div className="pf-trust-item">
-            <div className="pf-trust-title">Made to feel specific</div>
-            <div className="pf-trust-text">Not generic tips. A structured system.</div>
+            <div className="pf-trust-title">Actually useful after purchase</div>
+            <div className="pf-trust-text">
+              Save it, print it, or download it so it feels like a real system, not a throwaway result page.
+            </div>
           </div>
           <div className="pf-trust-item">
-            <div className="pf-trust-title">Worth keeping</div>
-            <div className="pf-trust-text">Save it, print it, or download it.</div>
+            <div className="pf-trust-title">Simple payment structure</div>
+            <div className="pf-trust-text">
+              One-time payment. No subscription. No account required to keep your plan on your device.
+            </div>
           </div>
         </div>
       </section>
@@ -1177,7 +1242,7 @@ function LandingPage({
               </div>
 
               <div className="pf-form-grid">
-                <Field label="Email" hint="Used to save your plan to this device before checkout">
+                <Field label="Email" hint="Used so your plan can be saved to this device before checkout">
                   <input
                     value={form.email}
                     onChange={(e) => updateField("email", e.target.value)}
@@ -1282,6 +1347,30 @@ function LandingPage({
                     className="pf-input"
                   >
                     {bodyGoalOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Session goal">
+                  <select
+                    value={form.sessionGoal}
+                    onChange={(e) => updateField("sessionGoal", e.target.value)}
+                    className="pf-input"
+                  >
+                    {sessionGoalOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Conditions / sweat load">
+                  <select
+                    value={form.weatherLoad}
+                    onChange={(e) => updateField("weatherLoad", e.target.value)}
+                    className="pf-input"
+                  >
+                    {weatherOptions.map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
@@ -1505,23 +1594,23 @@ function LandingPage({
                 Built to feel specific, practical, and worth the purchase.
               </div>
               <div className="pf-quote-sub">
-                Not generic nutrition talk. A real structure athletes can actually follow.
+                Not generic nutrition talk. A structured daily system athletes can actually follow.
               </div>
             </div>
 
             <div className="pf-side-card">
-              <div className="pf-side-top">Trust + value</div>
+              <div className="pf-side-top">Real trust builders</div>
               <div className="pf-bullet-row">
                 <span className="pf-bullet-dot">✓</span>
                 <span>One-time payment. No subscription.</span>
               </div>
               <div className="pf-bullet-row">
                 <span className="pf-bullet-dot">✓</span>
-                <span>Works on phone, desktop, save, print, and download.</span>
+                <span>Save, print, and download your plan immediately.</span>
               </div>
               <div className="pf-bullet-row">
                 <span className="pf-bullet-dot">✓</span>
-                <span>Built from your own schedule instead of random templates.</span>
+                <span>Built from your own schedule instead of a generic template.</span>
               </div>
             </div>
           </div>
@@ -1532,22 +1621,28 @@ function LandingPage({
         <div className="pf-container">
           <SectionHeading
             eyebrow="Trust"
-            title="Why this converts better"
-            text="This is designed to feel clear, premium, and genuinely useful the second someone lands on the page."
+            title="Clear value. Real personalization. No fake claims."
+            text="This page is built to convert by showing real usefulness, not made-up social proof."
             center
           />
           <div className="pf-proof-grid">
             <div className="pf-proof-card">
-              <div className="pf-proof-title">Specific inputs</div>
-              <div className="pf-proof-text">The builder asks questions that actually affect fueling, digestion, hydration, and recovery.</div>
+              <div className="pf-proof-title">Real personalization</div>
+              <div className="pf-proof-text">
+                The builder changes your plan using training time, sweat rate, digestion, hydration habits, and session demands.
+              </div>
             </div>
             <div className="pf-proof-card">
-              <div className="pf-proof-title">Specific plan</div>
-              <div className="pf-proof-text">The output changes based on goal, intensity, schedule, stomach sensitivity, hydration, and sweat rate.</div>
+              <div className="pf-proof-title">Immediate keep-value</div>
+              <div className="pf-proof-text">
+                Customers can save, print, or download the plan right away, which makes it feel like something worth paying for.
+              </div>
             </div>
             <div className="pf-proof-card">
-              <div className="pf-proof-title">Feels worth keeping</div>
-              <div className="pf-proof-text">Users can save, print, or download their plan, which makes it feel more real and more valuable.</div>
+              <div className="pf-proof-title">Simple, clean offer</div>
+              <div className="pf-proof-text">
+                One payment, no subscription, no complicated setup, and a plan that fits phone and desktop.
+              </div>
             </div>
           </div>
         </div>
@@ -1674,6 +1769,22 @@ function ResultsPage({ plan, isPaid, form, savePreview }) {
             </div>
 
             <div className="pf-mini-card">
+              <div className="pf-results-block-title">Risk flags</div>
+              {plan.trainingRiskFlags.map((tip) => (
+                <div key={tip} className="pf-small-result">• {tip}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="pf-summary-grid-two">
+            <div className="pf-mini-card">
+              <div className="pf-results-block-title">Why your timing looks like this</div>
+              {plan.fuelTimingNotes.map((tip) => (
+                <div key={tip} className="pf-small-result">• {tip}</div>
+              ))}
+            </div>
+
+            <div className="pf-mini-card">
               <div className="pf-results-block-title">Recovery system</div>
               {plan.recoveryTips.map((tip) => (
                 <div key={tip} className="pf-small-result">✓ {tip}</div>
@@ -1692,6 +1803,7 @@ function ResultsPage({ plan, isPaid, form, savePreview }) {
                     <div className="pf-item-desc">{item.desc}</div>
                     <div className="pf-item-meta">{item.macros}</div>
                     <div className="pf-item-meta secondary">{item.hydration}</div>
+                    <div className="pf-item-why">Why this matters: {item.why}</div>
                     <ul className="pf-examples-list">
                       {item.examples.map((example) => (
                         <li key={example}>{example}</li>
@@ -1777,6 +1889,8 @@ export default function PeakFuelWebsite() {
     breakfastHabit: "sometimes",
     appetite: "normal",
     budgetLevel: "medium",
+    sessionGoal: "normal",
+    weatherLoad: "indoor",
   });
 
   const [leadMessage, setLeadMessage] = useState("");
@@ -1888,9 +2002,6 @@ const globalCss = `
     --pf-blue: #0ea5e9;
     --pf-blue-dark: #0369a1;
     --pf-shadow: 0 12px 30px rgba(0,0,0,0.05);
-    --pf-radius-xl: 32px;
-    --pf-radius-lg: 24px;
-    --pf-radius-md: 18px;
   }
 
   html { scroll-behavior: smooth; }
@@ -2240,7 +2351,7 @@ const globalCss = `
     border: 1px solid var(--pf-line);
     border-radius: 30px;
     padding: 18px;
-    box-shadow: var(--pf-shadow);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.05);
   }
 
   .pf-metrics-grid {
@@ -2327,6 +2438,13 @@ const globalCss = `
   }
 
   .pf-item-meta.secondary { color: #0f172a; }
+
+  .pf-item-why {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #52525b;
+    line-height: 1.6;
+  }
 
   .pf-locked-block,
   .pf-why-box {
@@ -2688,7 +2806,7 @@ const globalCss = `
   }
 
   .pf-results-card {
-    box-shadow: var(--pf-shadow);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.05);
     border-radius: 32px;
   }
 
@@ -2760,12 +2878,9 @@ const globalCss = `
     .pf-hero-grid,
     .pf-two-col,
     .pf-for-you-section,
-    .pf-summary-grid-four {
-      grid-template-columns: 1fr;
-    }
-
-    .pf-proof-grid,
-    .pf-trust-strip {
+    .pf-summary-grid-four,
+    .pf-trust-strip,
+    .pf-proof-grid {
       grid-template-columns: 1fr;
     }
   }
